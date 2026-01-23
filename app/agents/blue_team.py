@@ -91,7 +91,7 @@ class BlueTeamAgent:
             target_file, current_content, exploit_code
         )
         
-        if "EXPLOIT_SUCCESS" not in baseline_result.get("output", ""):
+        if not baseline_result.get("exploit_succeeded", False):
             logger.warning("⚠️ Exploit doesn't succeed on vulnerable code - skipping patch")
             return {
                 "success": False,
@@ -156,8 +156,9 @@ class BlueTeamAgent:
                 # Check if exploit failed (meaning patch worked!)
                 exploit_output = verification.get("output", "")
                 exit_code = verification.get("exit_code", 0)
+                exploit_succeeded = verification.get("exploit_succeeded", False)
                 
-                if "EXPLOIT_SUCCESS" not in exploit_output:
+                if not exploit_succeeded:
                     # Exploit failed! Patch worked!
                     logger.info(f"✅ Patch verified! Exploit failed on patched code (attempt {attempt})")
                     return {
@@ -378,7 +379,7 @@ Return ONLY the fixed Python code with NO markdown formatting."""
             exploit_code: Exploit script
             
         Returns:
-            Dictionary with stdout, stderr, exit_code
+            Dictionary with stdout, stderr, exit_code, and exploit_succeeded flag
         """
         try:
             # Extract just the filename
@@ -391,10 +392,14 @@ Return ONLY the fixed Python code with NO markdown formatting."""
                 timeout=10
             )
             
+            # Analyze if exploit succeeded (same logic as Red Team)
+            exploit_succeeded = self._analyze_exploit_result(stdout, stderr, exit_code)
+            
             return {
                 "output": stdout,
                 "stderr": stderr,
-                "exit_code": exit_code
+                "exit_code": exit_code,
+                "exploit_succeeded": exploit_succeeded
             }
             
         except Exception as e:
@@ -402,8 +407,66 @@ Return ONLY the fixed Python code with NO markdown formatting."""
             return {
                 "output": "",
                 "stderr": str(e),
-                "exit_code": 1
+                "exit_code": 1,
+                "exploit_succeeded": False
             }
+    
+    def _analyze_exploit_result(self, stdout: str, stderr: str, exit_code: int) -> bool:
+        """
+        Analyze exploit execution result to determine if it succeeded.
+        Uses same logic as Red Team for consistency.
+        
+        Args:
+            stdout: Standard output from exploit
+            stderr: Standard error from exploit  
+            exit_code: Exit code from exploit
+            
+        Returns:
+            True if exploit succeeded, False otherwise
+        """
+        stdout_lower = stdout.lower()
+        stderr_lower = stderr.lower()
+        
+        # Check for explicit success marker
+        if "exploit_success" in stdout_lower:
+            return True
+        
+        # Check for explicit failure marker
+        if "exploit_failed" in stdout_lower:
+            return False
+        
+        # If exploit crashed, check if it shows vulnerability indicators
+        if exit_code != 0:
+            vulnerability_indicators = [
+                "injection",
+                "traversal",
+                "overflow", 
+                "unauthorized",
+                "malicious",
+                "hacked",
+                "pwned",
+                "rce",
+                "shell"
+            ]
+            output = stdout_lower + stderr_lower
+            if any(indicator in output for indicator in vulnerability_indicators):
+                return True
+            return False
+        
+        # Check for common success indicators in output
+        success_indicators = [
+            "uid=",  # Command injection showing user id
+            "root:",  # Path traversal showing /etc/passwd
+            "etc/passwd",
+            "select",  # SQL injection
+            "<script>",  # XSS
+            "<!entity",  # XXE
+        ]
+        
+        if any(indicator in stdout_lower for indicator in success_indicators):
+            return True
+        
+        return False
     
     def generate_patch_report(
         self,

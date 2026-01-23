@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
 
 const inter = Inter({ 
   subsets: ["latin"],
@@ -10,12 +9,12 @@ const inter = Inter({
 
 const jetbrainsMono = JetBrains_Mono({ 
   subsets: ["latin"],
-  variable: '--font-jetbrains-mono',
+  variable: '--font-mono',
 });
 
 export const metadata: Metadata = {
-  title: "CodeJanitor 🛡️ - Autonomous Security Agent",
-  description: "AI-powered vulnerability detection and auto-remediation",
+  title: "CodeJanitor — Autonomous Security Remediation",
+  description: "AI-powered vulnerability detection with automated exploitation verification and intelligent patching.",
 };
 
 export default function RootLayout({
@@ -24,14 +23,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
-        <div className="flex min-h-screen">
-          <Sidebar />
-          <main className="flex-1 ml-64">
-            {children}
-          </main>
-        </div>
+    <html lang="en" className="dark">
+      <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased bg-black text-white`}>
+        {children}
       </body>
     </html>
   );
