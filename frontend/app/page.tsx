@@ -104,7 +104,7 @@ export default function Dashboard() {
   const [scanComplete, setScanComplete] = useState(false);
   const [showLiveOps, setShowLiveOps] = useState(false);
   const [selectedVuln, setSelectedVuln] = useState<number | null>(null);
-  const [metrics, setMetrics] = useState({ threats: 0, scanned: 0, fixed: 0 });
+  const [metrics, setMetrics] = useState({ threats: 0, scanned: 0, fixed: 0, riskScore: 0 });
   const [scannedRepo, setScannedRepo] = useState('');
 
   // Extract repo owner and name from URL
@@ -123,7 +123,7 @@ export default function Dashboard() {
     
     setIsScanning(true);
     setScanComplete(false);
-    setMetrics({ threats: 0, scanned: 0, fixed: 0 });
+    setMetrics({ threats: 0, scanned: 0, fixed: 0, riskScore: 0 });
     setScannedRepo(repoUrl);
 
     // Simulate scan
@@ -139,6 +139,7 @@ export default function Dashboard() {
           threats: Math.min(count, 3),
           scanned: Math.min(count * 400, 1247),
           fixed: 0,
+          riskScore: Math.min(count * 2, 8.0),
         });
         if (count >= 4) clearInterval(interval);
       }, 100);
@@ -268,7 +269,7 @@ export default function Dashboard() {
                   />
                   <BentoCard
                     title="Risk Score"
-                    value="8.0"
+                    value={metrics.riskScore.toFixed(1)}
                     subtitle="CVSS"
                     icon={Activity}
                     accent="yellow"
