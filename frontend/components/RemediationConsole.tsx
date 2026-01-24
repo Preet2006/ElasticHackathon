@@ -29,7 +29,7 @@ interface RemediationConsoleProps {
   vulnerability: Vulnerability;
   repoUrl: string;
   prUrl?: string; // Optional: actual PR URL from backend API
-  onComplete: () => void;
+  onComplete: (prUrl?: string) => void; // Updated to pass PR URL
   onReturn: () => void;
   useRealApi?: boolean; // Whether to use real API or simulated
 }
@@ -277,7 +277,8 @@ export default function RemediationConsole({
                 setApiError(data.error);
               }
               setStage('completed');
-              onComplete();
+              // Pass PR URL to parent component
+              onComplete(data.pr_url || undefined);
               return;
             }
 

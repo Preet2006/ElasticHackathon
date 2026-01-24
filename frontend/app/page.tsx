@@ -10,7 +10,9 @@ import {
   Code2,
   FileWarning,
   Zap,
-  Play
+  Play,
+  ExternalLink,
+  GitPullRequest
 } from 'lucide-react';
 
 import CommandBar from '@/components/CommandBar';
@@ -19,6 +21,7 @@ import RemediationConsole from '@/components/RemediationConsole';
 import StrategySelector from '@/components/StrategySelector';
 import SelectableVulnerabilityList from '@/components/SelectableVulnerabilityList';
 import ScanningOverlay from '@/components/ScanningOverlay';
+import HelpWidget from '@/components/HelpWidget';
 
 // ============================================
 // CONFIG
@@ -125,6 +128,7 @@ export default function Dashboard() {
   const [currentRemediationVuln, setCurrentRemediationVuln] = useState<Vulnerability | null>(null);
   const [remediatedIds, setRemediatedIds] = useState<Set<number>>(new Set());
   const [pendingQueue, setPendingQueue] = useState<Vulnerability[]>([]);
+  const [prUrls, setPrUrls] = useState<Map<number, string>>(new Map());
   
   // Metrics
   const [metrics, setMetrics] = useState({ threats: 0, scanned: 0, fixed: 0, riskScore: 0 });
@@ -252,13 +256,18 @@ export default function Dashboard() {
     setStage(WorkflowStage.LIVE_OPS);
   };
 
-  const handleRemediationComplete = () => {
+  const handleRemediationComplete = (prUrl?: string) => {
     if (currentRemediationVuln) {
       // Mark as remediated
       const newRemediatedIds = new Set(Array.from(remediatedIds));
       newRemediatedIds.add(currentRemediationVuln.id);
       setRemediatedIds(newRemediatedIds);
       setMetrics(prev => ({ ...prev, fixed: prev.fixed + 1 }));
+
+      // Store PR URL if provided
+      if (prUrl) {
+        setPrUrls(prev => new Map(prev).set(currentRemediationVuln.id, prUrl));
+      }
 
       // Check if there are more in the queue
       if (pendingQueue.length > 0) {
@@ -288,6 +297,7 @@ export default function Dashboard() {
       setRepoUrl('');
       setVulnerabilities([]);
       setRemediatedIds(new Set());
+      setPrUrls(new Map());
     }
   };
 
@@ -594,86 +604,162 @@ export default function Dashboard() {
             {stage === WorkflowStage.SUCCESS && (
               <motion.section
                 key="success"
-                initial={{ opacity: 0, scale: 0.9 }}
+                initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className="pt-16"
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="pt-12 max-w-5xl mx-auto"
               >
-                <div className="text-center mb-12">
+                {/* Header */}
+                <div className="text-center mb-10">
                   <motion.div
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
-                    transition={{ type: 'spring', stiffness: 200, delay: 0.2 }}
-                    className="
-                      inline-flex items-center justify-center w-20 h-20 mb-6
-                      bg-[#00FF41]/10 rounded-3xl border border-[#00FF41]/20
-                    "
+                    transition={{ type: 'spring', stiffness: 200, delay: 0.1 }}
+                    className="inline-flex items-center justify-center w-16 h-16 mb-5 bg-emerald-500/10 rounded-2xl border border-emerald-500/20"
                   >
-                    <CheckCircle2 className="w-10 h-10 text-[#00FF41]" />
+                    <CheckCircle2 className="w-8 h-8 text-emerald-500" />
                   </motion.div>
                   
                   <motion.h2
-                    initial={{ opacity: 0, y: 20 }}
+                    initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 }}
-                    className="text-3xl font-bold text-white mb-3"
+                    transition={{ delay: 0.2 }}
+                    className="text-3xl font-semibold text-white mb-2 leading-tight"
                   >
-                    All Vulnerabilities Remediated!
+                    Remediation Complete
                   </motion.h2>
                   
                   <motion.p
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    transition={{ delay: 0.4 }}
-                    className="text-zinc-500"
+                    transition={{ delay: 0.3 }}
+                    className="text-zinc-400 text-base leading-relaxed"
                   >
-                    {metrics.fixed} security patches have been submitted as Pull Requests
+                    {metrics.fixed} security {metrics.fixed === 1 ? 'patch has' : 'patches have'} been generated and submitted for review
                   </motion.p>
                 </div>
 
-                {/* Final Stats */}
+                {/* Statistics Card */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.5 }}
-                  className="flex items-center justify-center gap-8 mb-12"
+                  transition={{ delay: 0.4 }}
+                  className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8 mb-8"
                 >
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-[#00FF41]">{metrics.fixed}</div>
-                    <div className="text-xs text-zinc-600">Patches Created</div>
-                  </div>
-                  <div className="h-8 w-px bg-zinc-800" />
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-400">{metrics.scanned}</div>
-                    <div className="text-xs text-zinc-600">Lines Scanned</div>
-                  </div>
-                  <div className="h-8 w-px bg-zinc-800" />
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-emerald-400">100%</div>
-                    <div className="text-xs text-zinc-600">Success Rate</div>
+                  <div className="grid grid-cols-3 gap-8">
+                    <div className="text-center">
+                      <div className="text-3xl font-semibold text-emerald-500 mb-1">{metrics.fixed}</div>
+                      <div className="text-sm text-zinc-500 leading-relaxed">Patches Created</div>
+                    </div>
+                    <div className="text-center border-l border-r border-zinc-800">
+                      <div className="text-3xl font-semibold text-blue-400 mb-1">{metrics.scanned}</div>
+                      <div className="text-sm text-zinc-500 leading-relaxed">Lines Scanned</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-3xl font-semibold text-emerald-400 mb-1">100%</div>
+                      <div className="text-sm text-zinc-500 leading-relaxed">Success Rate</div>
+                    </div>
                   </div>
                 </motion.div>
 
-                {/* Return Button */}
+                {/* Pull Requests Section */}
+                {prUrls.size > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                    className="mb-8"
+                  >
+                    <div className="flex items-center gap-2 mb-4">
+                      <GitPullRequest className="w-5 h-5 text-emerald-500" />
+                      <h3 className="text-lg font-semibold text-white">Pull Requests</h3>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      {Array.from(remediatedIds).map((vulnId, index) => {
+                        const vuln = vulnerabilities.find(v => v.id === vulnId);
+                        const prUrl = prUrls.get(vulnId);
+                        if (!vuln) return null;
+                        
+                        return (
+                          <motion.div
+                            key={vulnId}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.6 + index * 0.1 }}
+                            className="bg-zinc-900/30 border border-zinc-800 rounded-xl p-5 hover:border-zinc-700 transition-colors"
+                          >
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1 min-w-0">
+                                <h4 className="text-white font-medium mb-1 leading-snug">{vuln.title}</h4>
+                                <p className="text-sm text-zinc-500 leading-relaxed">
+                                  {vuln.file}:{vuln.line} • {vuln.type || 'Security Issue'}
+                                </p>
+                              </div>
+                              
+                              {prUrl && (
+                                <a
+                                  href={prUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="
+                                    inline-flex items-center gap-2 px-4 py-2
+                                    text-sm font-medium text-white
+                                    bg-emerald-600 hover:bg-emerald-500
+                                    rounded-lg transition-colors
+                                    whitespace-nowrap
+                                  "
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                  View PR
+                                </a>
+                              )}
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Actions */}
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ delay: 0.6 }}
-                  className="text-center"
+                  transition={{ delay: 0.7 }}
+                  className="flex items-center justify-center gap-4"
                 >
+                  <motion.a
+                    href={getGitHubUrl() + '/pulls'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="
+                      inline-flex items-center gap-2 px-5 py-2.5
+                      text-sm font-medium text-zinc-300
+                      bg-zinc-900 border border-zinc-700 rounded-lg
+                      hover:bg-zinc-800 hover:border-zinc-600
+                      transition-all
+                    "
+                  >
+                    <GitPullRequest className="w-4 h-4" />
+                    View All PRs
+                  </motion.a>
+                  
                   <motion.button
                     onClick={handleReturnToDashboard}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     className="
-                      inline-flex items-center gap-2 px-6 py-3
+                      inline-flex items-center gap-2 px-5 py-2.5
                       text-sm font-medium text-white
-                      bg-zinc-900 border border-white/10 rounded-xl
-                      hover:bg-zinc-800 hover:border-white/20
-                      transition-all duration-300
+                      bg-zinc-800 border border-zinc-700 rounded-lg
+                      hover:bg-zinc-700 hover:border-zinc-600
+                      transition-all
                     "
                   >
-                    <Zap className="w-4 h-4 text-[#00FF41]" />
+                    <Zap className="w-4 h-4 text-emerald-500" />
                     Scan Another Repository
                   </motion.button>
                 </motion.div>
@@ -697,6 +783,9 @@ export default function Dashboard() {
           </AnimatePresence>
         </motion.div>
       </div>
+
+      {/* Help Widget - Always visible */}
+      <HelpWidget />
     </div>
   );
 }
