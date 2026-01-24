@@ -266,6 +266,62 @@ class GitHubManager:
         except GithubException as e:
             logger.error(f"Failed to get repository info: {e}")
             raise GitHubError(f"Failed to get repository info: {e}") from e
+    
+    def create_pull_request(
+        self,
+        repo_url: str,
+        title: str,
+        body: str,
+        head: str,
+        base: str = "main"
+    ) -> Dict:
+        """
+        Create a pull request
+        
+        Args:
+            repo_url: Repository URL or owner/repo string
+            title: PR title
+            body: PR description (supports Markdown)
+            head: Branch name containing changes
+            base: Target branch (default: "main")
+            
+        Returns:
+            Dictionary with PR details (number, url, title)
+            
+        Raises:
+            GitHubError: If PR creation fails
+        """
+        try:
+            repo_name = self._parse_repo_url(repo_url)
+            repo = self.client.get_repo(repo_name)
+            
+            # Try main first, fallback to master
+            try:
+                repo.get_branch(base)
+            except:
+                logger.info(f"Branch '{base}' not found, trying 'master'")
+                base = "master"
+            
+            # Create pull request
+            pr = repo.create_pull(
+                title=title,
+                body=body,
+                head=head,
+                base=base
+            )
+            
+            logger.info(f"Created PR #{pr.number}: {title}")
+            
+            return {
+                "number": pr.number,
+                "html_url": pr.html_url,
+                "title": pr.title,
+                "state": pr.state
+            }
+            
+        except GithubException as e:
+            logger.error(f"Failed to create PR: {e}")
+            raise GitHubError(f"Failed to create PR: {e}") from e
 
 
 def create_github_manager(token: Optional[str] = None) -> GitHubManager:

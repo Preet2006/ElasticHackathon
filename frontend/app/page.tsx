@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Shield, 
@@ -10,13 +10,12 @@ import {
   Activity,
   Code2,
   FileWarning,
-  GitPullRequest,
-  ExternalLink
+  Flame
 } from 'lucide-react';
 
 import CommandBar from '@/components/CommandBar';
 import { BentoGrid, BentoCard } from '@/components/BentoGrid';
-import TerminalWindow from '@/components/TerminalWindow';
+import RemediationConsole from '@/components/RemediationConsole';
 
 // ============================================
 // DATA
@@ -25,58 +24,20 @@ import TerminalWindow from '@/components/TerminalWindow';
 const mockVulnerabilities = [
   {
     id: 1,
-    title: 'Insecure Deserialization',
-    file: 'user_loader.py',
+    title: 'Path Traversal',
+    file: 'log_viewer.py',
     line: 6,
-    type: 'Deserialization',
-    riskScore: 9.0,
+    type: 'Path Traversal',
+    riskScore: 8.0,
   },
   {
     id: 2,
-    title: 'Path Traversal',
-    file: 'backup_service.py',
-    line: 5,
-    type: 'Path Traversal',
-    riskScore: 6.0,
-  },
-  {
-    id: 3,
-    title: 'Command Injection',
-    file: 'backup_service.py',
-    line: 11,
-    type: 'Injection',
-    riskScore: 9.0,
-  },
-  {
-    id: 4,
-    title: 'XXE Attack Vector',
-    file: 'xml_auth.py',
+    title: 'Cross-Site Scripting (XSS)',
+    file: 'template_render.py',
     line: 4,
-    type: 'XXE',
-    riskScore: 9.0,
+    type: 'XSS',
+    riskScore: 8.0,
   },
-];
-
-const redTeamLogs = [
-  '[RECON] Mapping attack surface...',
-  '[DETECT] Identified unsafe pickle.loads() at user_loader.py:6',
-  '[EXPLOIT] Crafting malicious serialized payload...',
-  '[PAYLOAD] __reduce__ method injected with os.system()',
-  '[EXECUTE] Payload delivered via user input channel',
-  '[SUCCESS] Remote code execution achieved ✓',
-  '[VERIFY] Shell access confirmed on target system',
-  '[REPORT] Critical vulnerability verified - CVSS 9.8',
-];
-
-const blueTeamLogs = [
-  '[INIT] Defense protocol activated...',
-  '[ANALYZE] Reviewing exploit chain and entry points',
-  '[PATCH] Replacing pickle with json for data handling',
-  '[PATCH] Adding input validation layer',
-  '[PATCH] Implementing allowlist for expected data types',
-  '[TEST] Running exploit against patched code...',
-  '[VERIFY] Attack vector neutralized ✓',
-  '[SUCCESS] Secure patch generated and verified',
 ];
 
 // ============================================
@@ -103,21 +64,34 @@ const fadeUp = {
 };
 
 // ============================================
+// TYPES
+// ============================================
+
+interface Vulnerability {
+  id: number;
+  title: string;
+  file: string;
+  line: number;
+  type: string;
+  riskScore: number;
+}
+
+type AppStage = 'idle' | 'scanning' | 'results' | 'remediating' | 'completed';
+
+// ============================================
 // MAIN COMPONENT
 // ============================================
 
 export default function Dashboard() {
   const [repoUrl, setRepoUrl] = useState('');
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanComplete, setScanComplete] = useState(false);
-  const [showLiveOps, setShowLiveOps] = useState(false);
-  const [selectedVuln, setSelectedVuln] = useState<number | null>(null);
+  const [stage, setStage] = useState<AppStage>('idle');
+  const [selectedVuln, setSelectedVuln] = useState<Vulnerability | null>(null);
   const [metrics, setMetrics] = useState({ threats: 0, scanned: 0, fixed: 0, riskScore: 0 });
   const [scannedRepo, setScannedRepo] = useState('');
+  const [remediatedIds, setRemediatedIds] = useState<Set<number>>(new Set());
 
   // Extract repo owner and name from URL
   const extractRepoInfo = (url: string) => {
-    // Handle formats: username/repo, github.com/username/repo, https://github.com/username/repo
     const cleanUrl = url.replace('https://', '').replace('http://', '').replace('github.com/', '');
     const match = cleanUrl.match(/^([^/]+)\/([^/]+)/);
     if (match) {
@@ -126,45 +100,71 @@ export default function Dashboard() {
     return null;
   };
 
+  // Get GitHub URL for PR
+  const getGitHubUrl = () => {
+    const repoInfo = extractRepoInfo(scannedRepo);
+    if (repoInfo) {
+      return `https://github.com/${repoInfo.owner}/${repoInfo.repo}`;
+    }
+    return 'https://github.com';
+  };
+
+  // Smart prioritization: Sort vulnerabilities by risk score (highest first)
+  const sortedVulnerabilities = [...mockVulnerabilities].sort((a, b) => b.riskScore - a.riskScore);
+
+  // Check if vulnerability is high priority (CRITICAL)
+  const isHighPriority = (riskScore: number) => riskScore >= 8.0;
+
   const handleScan = () => {
     if (!repoUrl.trim()) return;
     
-    setIsScanning(true);
-    setScanComplete(false);
+    setStage('scanning');
     setMetrics({ threats: 0, scanned: 0, fixed: 0, riskScore: 0 });
     setScannedRepo(repoUrl);
+    setRemediatedIds(new Set());
 
     // Simulate scan
     setTimeout(() => {
-      setIsScanning(false);
-      setScanComplete(true);
+      setStage('results');
       
       // Animate metrics
       let count = 0;
       const interval = setInterval(() => {
         count++;
         setMetrics({
-          threats: Math.min(count, 4),
-          scanned: Math.min(count * 400, 1247),
+          threats: Math.min(count, sortedVulnerabilities.length),
+          scanned: Math.min(count * 300, 600),
           fixed: 0,
-          riskScore: Math.min(count * 2.25, 9.0),
+          riskScore: Math.min(count * 4, 8.0),
         });
-        if (count >= 4) clearInterval(interval);
+        if (count >= sortedVulnerabilities.length) clearInterval(interval);
       }, 100);
     }, 2000);
   };
 
-  const handleRemediate = (vulnId: number) => {
-    setSelectedVuln(vulnId);
-    setShowLiveOps(true);
+  const handleRemediate = (vuln: Vulnerability) => {
+    setSelectedVuln(vuln);
+    setStage('remediating');
     
-    // Scroll to ops section
-    setTimeout(() => {
-      document.getElementById('live-ops')?.scrollIntoView({ 
-        behavior: 'smooth',
-        block: 'start'
+    // Scroll to top smoothly
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleRemediationComplete = () => {
+    if (selectedVuln) {
+      setRemediatedIds(prev => {
+        const newSet = new Set(Array.from(prev));
+        newSet.add(selectedVuln.id);
+        return newSet;
       });
-    }, 100);
+      setMetrics(prev => ({ ...prev, fixed: prev.fixed + 1 }));
+    }
+    setStage('completed');
+  };
+
+  const handleReturnToDashboard = () => {
+    setSelectedVuln(null);
+    setStage('results');
   };
 
   // Get severity level based on risk score
@@ -242,7 +242,7 @@ export default function Dashboard() {
               value={repoUrl}
               onChange={setRepoUrl}
               onSubmit={handleScan}
-              isLoading={isScanning}
+              isLoading={stage === 'scanning'}
               placeholder="github.com/username/repository"
             />
           </motion.div>
@@ -251,7 +251,7 @@ export default function Dashboard() {
           {/* BENTO GRID - STATS */}
           {/* ============================================ */}
           <AnimatePresence>
-            {(isScanning || scanComplete) && (
+            {(stage === 'scanning' || stage === 'results') && (
               <motion.section
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
@@ -300,7 +300,7 @@ export default function Dashboard() {
           {/* VULNERABILITY LIST */}
           {/* ============================================ */}
           <AnimatePresence>
-            {scanComplete && (
+            {stage === 'results' && (
               <motion.section
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -312,15 +312,21 @@ export default function Dashboard() {
                   <h2 className="text-sm font-medium text-zinc-400 flex items-center gap-2 uppercase tracking-wider">
                     <FileWarning className="w-4 h-4 text-red-500" />
                     Detected Vulnerabilities
+                    <span className="text-[10px] text-zinc-600 font-normal normal-case ml-2">
+                      (sorted by priority)
+                    </span>
                   </h2>
                   <span className="text-xs font-mono text-zinc-700">
-                    {mockVulnerabilities.length} issues
+                    {sortedVulnerabilities.length - remediatedIds.size} remaining
                   </span>
                 </div>
 
                 <div className="space-y-2">
-                  {mockVulnerabilities.map((vuln, index) => {
+                  {sortedVulnerabilities
+                    .filter(vuln => !remediatedIds.has(vuln.id))
+                    .map((vuln, index) => {
                     const severity = getSeverity(vuln.riskScore);
+                    const highPriority = isHighPriority(vuln.riskScore);
                     return (
                     <motion.div
                       key={vuln.id}
@@ -328,26 +334,57 @@ export default function Dashboard() {
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.4 + index * 0.1 }}
                       whileHover={{ scale: 1.005 }}
-                      className="
+                      className={`
                         group relative p-5
                         bg-zinc-900/30 backdrop-blur-sm rounded-xl
-                        border border-white/[0.03]
-                        hover:border-red-500/10 hover:bg-zinc-900/50
-                        transition-all duration-500
-                      "
+                        border transition-all duration-500
+                        ${highPriority 
+                          ? 'border-red-500/20 hover:border-red-500/30 hover:bg-red-950/20' 
+                          : 'border-white/[0.03] hover:border-red-500/10 hover:bg-zinc-900/50'
+                        }
+                      `}
                     >
+                      {/* High Priority Indicator */}
+                      {highPriority && (
+                        <div className="absolute -top-2 -right-2">
+                          <motion.div
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            className="flex items-center gap-1 px-2 py-0.5 bg-red-500/20 border border-red-500/30 rounded-full"
+                          >
+                            <Flame className="w-3 h-3 text-red-400" />
+                            <span className="text-[9px] font-semibold text-red-400 uppercase">High Priority</span>
+                          </motion.div>
+                        </div>
+                      )}
+
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                           {/* Severity Indicator */}
-                          <div className={`flex items-center justify-center w-10 h-10 rounded-lg bg-${severity.color}-500/5 border border-${severity.color}-500/10`}>
-                            <AlertTriangle className={`w-4 h-4 text-${severity.color}-500/80`} />
+                          <div className={`flex items-center justify-center w-10 h-10 rounded-lg ${
+                            severity.color === 'red' ? 'bg-red-500/10 border-red-500/20' :
+                            severity.color === 'orange' ? 'bg-orange-500/10 border-orange-500/20' :
+                            severity.color === 'yellow' ? 'bg-yellow-500/10 border-yellow-500/20' :
+                            'bg-blue-500/10 border-blue-500/20'
+                          } border`}>
+                            <AlertTriangle className={`w-4 h-4 ${
+                              severity.color === 'red' ? 'text-red-500' :
+                              severity.color === 'orange' ? 'text-orange-500' :
+                              severity.color === 'yellow' ? 'text-yellow-500' :
+                              'text-blue-500'
+                            }`} />
                           </div>
 
                           {/* Info */}
                           <div>
                             <div className="flex items-center gap-3 mb-1">
                               <span className="text-zinc-200 font-medium text-sm">{vuln.title}</span>
-                              <span className={`px-1.5 py-0.5 text-[9px] font-mono text-${severity.color}-400/80 bg-${severity.color}-500/5 rounded border border-${severity.color}-500/10`}>
+                              <span className={`px-1.5 py-0.5 text-[9px] font-mono rounded border ${
+                                severity.color === 'red' ? 'text-red-400 bg-red-500/10 border-red-500/20' :
+                                severity.color === 'orange' ? 'text-orange-400 bg-orange-500/10 border-orange-500/20' :
+                                severity.color === 'yellow' ? 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20' :
+                                'text-blue-400 bg-blue-500/10 border-blue-500/20'
+                              }`}>
                                 {severity.label}
                               </span>
                             </div>
@@ -365,7 +402,7 @@ export default function Dashboard() {
                         <motion.button
                           whileHover={{ scale: 1.03 }}
                           whileTap={{ scale: 0.97 }}
-                          onClick={() => handleRemediate(vuln.id)}
+                          onClick={() => handleRemediate(vuln)}
                           className="
                             flex items-center gap-2 px-4 py-2
                             text-xs font-medium
@@ -377,112 +414,54 @@ export default function Dashboard() {
                           "
                         >
                           <Zap className="w-3.5 h-3.5" />
-                          <span>Remediate</span>
+                          <span>Auto-Remediate</span>
                         </motion.button>
                       </div>
                     </motion.div>
                   );})}
                 </div>
+
+                {/* All Fixed Message */}
+                {remediatedIds.size === sortedVulnerabilities.length && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-8 text-center bg-[#00FF41]/5 border border-[#00FF41]/20 rounded-xl"
+                  >
+                    <CheckCircle2 className="w-12 h-12 text-[#00FF41] mx-auto mb-4" />
+                    <h3 className="text-xl font-medium text-white mb-2">All Vulnerabilities Remediated!</h3>
+                    <p className="text-zinc-500 text-sm">Your repository is now secure. All patches have been submitted as PRs.</p>
+                  </motion.div>
+                )}
               </motion.section>
             )}
           </AnimatePresence>
 
           {/* ============================================ */}
-          {/* LIVE OPS - TERMINALS */}
+          {/* REMEDIATION CONSOLE - LIVE OPS */}
           {/* ============================================ */}
-          <AnimatePresence>
-            {showLiveOps && (
+          <AnimatePresence mode="wait">
+            {(stage === 'remediating' || stage === 'completed') && selectedVuln && (
               <motion.section
-                id="live-ops"
+                key="remediation-console"
                 initial={{ opacity: 0, y: 40 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.6 }}
-                className="space-y-6 pt-4"
+                className="pt-4"
               >
-                {/* Section Header */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900/50 rounded-full border border-white/[0.03]">
-                      <motion.div
-                        className="w-1.5 h-1.5 rounded-full bg-[#00FF41]"
-                        animate={{ opacity: [1, 0.3, 1] }}
-                        transition={{ duration: 1.5, repeat: Infinity }}
-                      />
-                      <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">Live Operations</span>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-mono text-zinc-700">
-                    Vulnerability #{selectedVuln}
-                  </span>
-                </div>
-
-                {/* Terminal Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <TerminalWindow
-                    title="RED TEAM"
-                    logs={redTeamLogs}
-                    variant="red"
-                    isActive={true}
-                    typingSpeed={40}
-                  />
-                  <TerminalWindow
-                    title="BLUE TEAM"
-                    logs={blueTeamLogs}
-                    variant="blue"
-                    isActive={true}
-                    typingSpeed={45}
-                  />
-                </div>
-
-                {/* Success Banner */}
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 8, duration: 0.5 }}
-                  className="
-                    relative overflow-hidden p-5
-                    bg-[#00FF41]/[0.02]
-                    border border-[#00FF41]/10 rounded-xl
-                  "
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="p-2.5 bg-[#00FF41]/5 rounded-lg border border-[#00FF41]/10">
-                      <GitPullRequest className="w-5 h-5 text-[#00FF41]/80" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-zinc-200 font-medium text-sm mb-0.5">
-                        Pull Request Created
-                      </h3>
-                      <p className="text-xs text-zinc-600">
-                        Vulnerability patched and verified. Ready for review.
-                      </p>
-                    </div>
-                    <motion.a
-                      href={(() => {
-                        const repoInfo = extractRepoInfo(scannedRepo);
-                        if (repoInfo) {
-                          return `https://github.com/${repoInfo.owner}/${repoInfo.repo}/pulls`;
-                        }
-                        return 'https://github.com';
-                      })()}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      className="
-                        flex items-center gap-2 px-3 py-1.5
-                        text-xs font-medium text-zinc-400
-                        bg-zinc-900/50 border border-white/5 rounded-lg
-                        hover:bg-zinc-800/50 hover:text-zinc-300
-                        transition-all duration-300
-                      "
-                    >
-                      <span>View PR</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </motion.a>
-                  </div>
-                </motion.div>
+                <RemediationConsole
+                  vulnerability={{
+                    id: String(selectedVuln.id),
+                    title: selectedVuln.title,
+                    file: selectedVuln.file,
+                    line: selectedVuln.line,
+                    riskScore: selectedVuln.riskScore,
+                  }}
+                  repoUrl={getGitHubUrl()}
+                  onComplete={handleRemediationComplete}
+                  onReturn={handleReturnToDashboard}
+                />
               </motion.section>
             )}
           </AnimatePresence>
