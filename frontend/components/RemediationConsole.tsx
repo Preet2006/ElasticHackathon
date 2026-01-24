@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, startTransition } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Shield, 
@@ -13,12 +13,16 @@ import {
   GitPullRequest
 } from 'lucide-react';
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 interface Vulnerability {
   id: string;
   title: string;
   file: string;
   line: number;
   riskScore: number;
+  type?: string;
+  description?: string;
 }
 
 interface RemediationConsoleProps {
@@ -27,12 +31,13 @@ interface RemediationConsoleProps {
   prUrl?: string; // Optional: actual PR URL from backend API
   onComplete: () => void;
   onReturn: () => void;
+  useRealApi?: boolean; // Whether to use real API or simulated
 }
 
 interface LogEntry {
   id: number;
   text: string;
-  type: 'recon' | 'plan' | 'exploit' | 'success' | 'defense' | 'patch' | 'verify' | 'info';
+  type: 'recon' | 'plan' | 'exploit' | 'success' | 'defense' | 'patch' | 'verify' | 'info' | 'error' | 'warning';
 }
 
 export default function RemediationConsole({ 
@@ -40,20 +45,39 @@ export default function RemediationConsole({
   repoUrl,
   prUrl: externalPrUrl, 
   onComplete, 
-  onReturn 
+  onReturn,
+  useRealApi = true  // Use real API with streaming
 }: RemediationConsoleProps) {
+  // Debug: Log component render
+  console.log('[RemediationConsole] Rendering with props:', { vulnerability, repoUrl, useRealApi });
+  
   const [stage, setStage] = useState<'red-team' | 'blue-team' | 'completed'>('red-team');
-  const [redTeamLogs, setRedTeamLogs] = useState<LogEntry[]>([]);
+  const [redTeamLogs, setRedTeamLogs] = useState<LogEntry[]>([
+    // Initial log entry to show the component is working
+    { id: -1, text: '> Connecting to CodeJanitor API...', type: 'info' }
+  ]);
   const [blueTeamLogs, setBlueTeamLogs] = useState<LogEntry[]>([]);
   const [currentTypingRed, setCurrentTypingRed] = useState('');
   const [currentTypingBlue, setCurrentTypingBlue] = useState('');
+  const [generatedPrUrl, setGeneratedPrUrl] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
   
   const redTeamRef = useRef<HTMLDivElement>(null);
   const blueTeamRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const hasStartedRef = useRef(false); // Use ref to survive Strict Mode remounts
 
-  // Use external PR URL if provided, otherwise link to latest PRs
-  // Format: https://github.com/owner/repo/pulls?q=is%3Apr+is%3Aopen+sort%3Acreated-desc
-  const prUrl = externalPrUrl || `${repoUrl}/pulls?q=is%3Apr+sort%3Acreated-desc`;
+  // Debug: Log state changes
+  useEffect(() => {
+    console.log('[RemediationConsole] redTeamLogs changed:', redTeamLogs.length, 'entries');
+  }, [redTeamLogs]);
+  
+  useEffect(() => {
+    console.log('[RemediationConsole] blueTeamLogs changed:', blueTeamLogs.length, 'entries');
+  }, [blueTeamLogs]);
+
+  // Use external PR URL if provided, then generated, otherwise link to latest PRs
+  const prUrl = externalPrUrl || generatedPrUrl || `${repoUrl}/pulls?q=is%3Apr+sort%3Acreated-desc`;
 
   // Red Team logs sequence
   const redTeamSequence: { text: string; type: LogEntry['type']; delay: number }[] = [
@@ -142,8 +166,181 @@ export default function RemediationConsole({
     });
   };
 
-  // Run Red Team sequence
-  useEffect(() => {
+  // Real API streaming handler
+  const runRealApiRemediation = useCallback(async () => {
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    console.log('[API] Starting real API remediation');
+    
+    // Show immediate feedback that we're starting
+    setRedTeamLogs([{ id: 0, text: '> Initiating API connection...', type: 'info' }]);
+
+    try {
+      // Extract repo from URL (e.g., "https://github.com/owner/repo" -> "owner/repo")
+      const repoMatch = repoUrl.match(/github\.com\/([^/]+\/[^/]+)/);
+      const repo = repoMatch ? repoMatch[1] : repoUrl;
+
+      console.log('[API] Calling /api/fix for repo:', repo);
+      
+      // Show what we're doing - batch these updates
+      setRedTeamLogs(prev => [
+        ...prev,
+        { id: 1, text: `> Target: ${repo}`, type: 'info' },
+        { id: 2, text: `> Vulnerability: ${vulnerability.title}`, type: 'recon' },
+        { id: 3, text: '> Sending request to API...', type: 'info' }
+      ]);
+
+      const requestBody = {
+        repo_url: repo,
+        vulnerability_id: parseInt(vulnerability.id),
+        vulnerability: {
+          id: vulnerability.id,
+          title: vulnerability.title,
+          file: vulnerability.file,
+          line: vulnerability.line,
+          riskScore: vulnerability.riskScore,
+          type: vulnerability.type || vulnerability.title,
+          description: vulnerability.description || '',
+        }
+      };
+
+      const response = await fetch(`${API_BASE_URL}/api/fix`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+
+      console.log('[API] Response status:', response.status);
+      setRedTeamLogs(prev => [...prev, { id: 4, text: `> Response: ${response.status} ${response.ok ? 'OK' : 'FAILED'}`, type: response.ok ? 'success' : 'error' }]);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[API] Error response:', errorText);
+        throw new Error(`API error: ${response.status} - ${errorText}`);
+      }
+
+      setRedTeamLogs(prev => [...prev, { id: 5, text: '> Stream connected, receiving data...', type: 'success' }]);
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        console.error('[API] No response body reader available');
+        throw new Error('No response body');
+      }
+
+      console.log('[API] Got reader, starting to read stream...');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let logIdCounter = 0;
+      let hasReceivedData = false;
+      let hasReplacedInitialLogs = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          console.log('[API] Stream done');
+          break;
+        }
+
+        const chunk = decoder.decode(value, { stream: true });
+        if (!hasReceivedData) {
+          console.log('[API] First chunk received:', chunk.substring(0, 100));
+          hasReceivedData = true;
+        }
+
+        buffer += chunk;
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+
+          try {
+            const data = JSON.parse(line);
+            console.log('[API] Parsed data:', data.phase, data.message?.substring(0, 50));
+
+            // Check for final response
+            if ('success' in data && 'pr_url' in data) {
+              console.log('[API] Final response:', data.success, data.pr_url);
+              if (data.success && data.pr_url) {
+                setGeneratedPrUrl(data.pr_url);
+              }
+              if (!data.success && data.error) {
+                setApiError(data.error);
+              }
+              setStage('completed');
+              onComplete();
+              return;
+            }
+
+            // Process log entry
+            if (data.phase && data.message) {
+              const logEntry: LogEntry = {
+                id: logIdCounter++,
+                text: data.message,
+                type: mapApiType(data.type),
+              };
+
+              if (data.phase === 'red_team' || data.phase === 'init') {
+                console.log('[API] Adding to red team logs:', logEntry.text.substring(0, 30));
+                // Update state - React will batch these
+                if (!hasReplacedInitialLogs) {
+                  hasReplacedInitialLogs = true;
+                  setRedTeamLogs([logEntry]);
+                } else {
+                  setRedTeamLogs(prev => [...prev, logEntry]);
+                }
+                if (redTeamRef.current) {
+                  redTeamRef.current.scrollTop = redTeamRef.current.scrollHeight;
+                }
+              } else if (data.phase === 'blue_team' || data.phase === 'pr') {
+                console.log('[API] Adding to blue team logs:', logEntry.text.substring(0, 30));
+                setStage('blue-team');
+                setBlueTeamLogs(prev => [...prev, logEntry]);
+                if (blueTeamRef.current) {
+                  blueTeamRef.current.scrollTop = blueTeamRef.current.scrollHeight;
+                }
+              } else if (data.phase === 'error') {
+                setApiError(data.message);
+              }
+            }
+          } catch (e) {
+            console.log('[API] JSON parse error for line:', line.substring(0, 50));
+          }
+        }
+      }
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') return;
+      console.error('[API] Remediation error:', error);
+      const errorMsg = (error as Error).message;
+      setApiError(errorMsg);
+      // Show error in red team logs too
+      setRedTeamLogs(prev => [...prev, { id: 999, text: `ERROR: ${errorMsg}`, type: 'error' }]);
+    }
+  }, [repoUrl, vulnerability, onComplete]);
+
+  // Helper to map API log types to our types
+  const mapApiType = (apiType: string): LogEntry['type'] => {
+    const typeMap: Record<string, LogEntry['type']> = {
+      'recon': 'recon',
+      'plan': 'plan',
+      'exploit': 'exploit',
+      'success': 'success',
+      'defense': 'defense',
+      'patch': 'patch',
+      'verify': 'verify',
+      'info': 'info',
+      'error': 'info',
+      'warning': 'info',
+    };
+    return typeMap[apiType] || 'info';
+  };
+
+  // Simulated remediation (fallback)
+  const runSimulatedRemediation = useCallback(async () => {
     let isMounted = true;
     
     const runRedTeam = async () => {
@@ -155,15 +352,12 @@ export default function RemediationConsole({
         
         if (!isMounted) return;
         
-        // Type the log
         await typeLog(log.text, setCurrentTypingRed, 12);
         
         if (!isMounted) return;
         
-        // Add to logs
         setRedTeamLogs(prev => [...prev, { id: i, text: log.text, type: log.type }]);
         
-        // Auto-scroll
         if (redTeamRef.current) {
           redTeamRef.current.scrollTop = redTeamRef.current.scrollHeight;
         }
@@ -172,54 +366,68 @@ export default function RemediationConsole({
       if (isMounted) {
         await new Promise(resolve => setTimeout(resolve, 800));
         setStage('blue-team');
+        
+        for (let i = 0; i < blueTeamSequence.length; i++) {
+          if (!isMounted) return;
+          
+          const log = blueTeamSequence[i];
+          await new Promise(resolve => setTimeout(resolve, log.delay));
+          
+          if (!isMounted) return;
+          
+          await typeLog(log.text, setCurrentTypingBlue, 12);
+          
+          if (!isMounted) return;
+          
+          setBlueTeamLogs(prev => [...prev, { id: i, text: log.text, type: log.type }]);
+          
+          if (blueTeamRef.current) {
+            blueTeamRef.current.scrollTop = blueTeamRef.current.scrollHeight;
+          }
+        }
+        
+        if (isMounted) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          setStage('completed');
+          onComplete();
+        }
       }
     };
 
     runRedTeam();
     
     return () => { isMounted = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Run Blue Team sequence after Red Team
+  // Main effect to run remediation - runs only once on mount
   useEffect(() => {
-    if (stage !== 'blue-team') return;
+    // Use ref to prevent double-execution in React Strict Mode
+    if (hasStartedRef.current) {
+      console.log('[RemediationConsole] Already started, skipping');
+      return;
+    }
+    hasStartedRef.current = true;
+
+    console.log('[RemediationConsole] Starting remediation, useRealApi:', useRealApi);
     
-    let isMounted = true;
-    
-    const runBlueTeam = async () => {
-      for (let i = 0; i < blueTeamSequence.length; i++) {
-        if (!isMounted) return;
-        
-        const log = blueTeamSequence[i];
-        await new Promise(resolve => setTimeout(resolve, log.delay));
-        
-        if (!isMounted) return;
-        
-        // Type the log
-        await typeLog(log.text, setCurrentTypingBlue, 12);
-        
-        if (!isMounted) return;
-        
-        // Add to logs
-        setBlueTeamLogs(prev => [...prev, { id: i, text: log.text, type: log.type }]);
-        
-        // Auto-scroll
-        if (blueTeamRef.current) {
-          blueTeamRef.current.scrollTop = blueTeamRef.current.scrollHeight;
-        }
-      }
-      
-      if (isMounted) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setStage('completed');
-        onComplete();
+    if (useRealApi) {
+      console.log('[RemediationConsole] Calling runRealApiRemediation');
+      runRealApiRemediation().catch(err => {
+        console.error('[RemediationConsole] runRealApiRemediation failed:', err);
+      });
+    } else {
+      console.log('[RemediationConsole] Calling runSimulatedRemediation');
+      runSimulatedRemediation();
+    }
+
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
       }
     };
-
-    runBlueTeam();
-    
-    return () => { isMounted = false; };
-  }, [stage]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const getLogColor = (type: LogEntry['type']) => {
     switch (type) {
@@ -230,6 +438,8 @@ export default function RemediationConsole({
       case 'defense': return 'text-blue-400';
       case 'patch': return 'text-cyan-400';
       case 'verify': return 'text-emerald-400';
+      case 'error': return 'text-red-500';
+      case 'warning': return 'text-yellow-500';
       default: return 'text-zinc-500';
     }
   };
@@ -241,6 +451,18 @@ export default function RemediationConsole({
       exit={{ opacity: 0, y: -20 }}
       className="w-full"
     >
+      {/* Debug: Show API error if present */}
+      {apiError && (
+        <div className="mb-4 p-4 bg-red-900/30 border border-red-500/30 rounded-lg text-red-400 text-sm">
+          <strong>API Error:</strong> {apiError}
+        </div>
+      )}
+      
+      {/* Debug: Show component state */}
+      <div className="mb-4 p-2 bg-zinc-900/50 border border-zinc-700 rounded text-xs font-mono text-zinc-400">
+        Debug: redTeamLogs={redTeamLogs.length}, blueTeamLogs={blueTeamLogs.length}, stage={stage}, hasStarted={String(hasStartedRef.current)}
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">

@@ -4,7 +4,8 @@ Tier 1: Groq (llama-3.3-70b-versatile) - Fast and smart
 Tier 2: HuggingFace Serverless (Mistral-7B-Instruct-v0.2) - Reliable and free
 """
 
-from typing import Optional, Any, Dict, Union
+from __future__ import annotations
+from typing import Optional, Any, Dict, Union, List
 from langchain_groq import ChatGroq
 from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
@@ -113,8 +114,8 @@ def _is_retryable_error(exception: Exception) -> bool:
 
 @retry(
     retry=retry_if_exception_type((RateLimitError, APITimeoutError, ConnectionError, TimeoutError)),
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=4, max=10),
+    stop=stop_after_attempt(1),  # Only 1 attempt - fail fast to fallback
+    wait=wait_exponential(multiplier=1, min=1, max=2),
     before_sleep=before_sleep_log(logger, logging.WARNING),
     after=after_log(logger, logging.INFO)
 )

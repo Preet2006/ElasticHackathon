@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Shield, 
@@ -21,6 +21,12 @@ import SelectableVulnerabilityList from '@/components/SelectableVulnerabilityLis
 import ScanningOverlay from '@/components/ScanningOverlay';
 
 // ============================================
+// CONFIG
+// ============================================
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+// ============================================
 // TYPES
 // ============================================
 
@@ -31,6 +37,9 @@ interface Vulnerability {
   line: number;
   type: string;
   riskScore: number;
+  description?: string;
+  function?: string;
+  severity?: string;
 }
 
 // State Machine for the Workflow
@@ -46,25 +55,30 @@ enum WorkflowStage {
 // ============================================
 // DATA
 // ============================================
+// All data now comes from real API - no fallback demo data
 
-const mockVulnerabilities: Vulnerability[] = [
-  {
-    id: 1,
-    title: 'Path Traversal',
-    file: 'log_viewer.py',
-    line: 6,
-    type: 'Path Traversal',
-    riskScore: 8.0,
-  },
-  {
-    id: 2,
-    title: 'Cross-Site Scripting (XSS)',
-    file: 'template_render.py',
-    line: 4,
-    type: 'XSS',
-    riskScore: 8.0,
-  },
-];
+// ============================================
+// API FUNCTIONS
+// ============================================
+
+async function scanRepository(repoUrl: string): Promise<{ vulnerabilities: Vulnerability[], summary: any }> {
+  const response = await fetch(`${API_BASE_URL}/api/scan`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ repo_url: repoUrl }),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Scan failed' }));
+    throw new Error(error.detail || 'Scan failed');
+  }
+  
+  const data = await response.json();
+  return {
+    vulnerabilities: data.vulnerabilities || [],
+    summary: data.summary || {},
+  };
+}
 
 // ============================================
 // ANIMATION VARIANTS
@@ -102,6 +116,8 @@ export default function Dashboard() {
   const [repoUrl, setRepoUrl] = useState('');
   const [scannedRepo, setScannedRepo] = useState('');
   const [stage, setStage] = useState<WorkflowStage>(WorkflowStage.IDLE);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   // Vulnerability State
   const [vulnerabilities, setVulnerabilities] = useState<Vulnerability[]>([]);
@@ -149,25 +165,44 @@ export default function Dashboard() {
     setSelectedIds(new Set());
     setRemediatedIds(new Set());
     setPendingQueue([]);
+    setError(null);
   };
 
-  const handleScanComplete = () => {
-    // Load vulnerabilities (in real app, this would come from API)
-    setVulnerabilities(mockVulnerabilities);
+  const handleScanComplete = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
     
-    // Animate metrics
+    try {
+      const result = await scanRepository(scannedRepo);
+      const fetchedVulns = result.vulnerabilities;
+      
+      setVulnerabilities(fetchedVulns);
+      const totalLines = result.summary?.scanned_files ? result.summary.scanned_files * 100 : 1000;
+      animateMetricsAndTransition(fetchedVulns, totalLines);
+    } catch (err) {
+      console.error('Scan failed:', err);
+      setError(err instanceof Error ? err.message : 'Scan failed');
+      setVulnerabilities([]);
+      setStage(WorkflowStage.STRATEGY_SELECTION);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [scannedRepo]);
+
+  // Helper to animate metrics and transition to next stage
+  const animateMetricsAndTransition = (vulns: Vulnerability[], totalLines: number) => {
+    const maxRisk = vulns.length > 0 ? Math.max(...vulns.map(v => v.riskScore)) : 8.0;
     let count = 0;
     const interval = setInterval(() => {
       count++;
       setMetrics({
-        threats: Math.min(count, mockVulnerabilities.length),
-        scanned: Math.min(count * 300, 600),
+        threats: Math.min(count, vulns.length),
+        scanned: Math.min(count * (totalLines / Math.max(vulns.length, 1)), totalLines),
         fixed: 0,
-        riskScore: Math.min(count * 4, 8.0),
+        riskScore: Math.min((count / Math.max(vulns.length, 1)) * maxRisk, maxRisk),
       });
-      if (count >= mockVulnerabilities.length) {
+      if (count >= vulns.length) {
         clearInterval(interval);
-        // Transition to strategy selection after metrics animate
         setTimeout(() => setStage(WorkflowStage.STRATEGY_SELECTION), 500);
       }
     }, 150);
@@ -175,7 +210,7 @@ export default function Dashboard() {
 
   const handleSelectAutoStrategy = () => {
     // Auto mode: select all vulnerabilities sorted by risk
-    const sorted = [...mockVulnerabilities].sort((a, b) => b.riskScore - a.riskScore);
+    const sorted = [...vulnerabilities].sort((a, b) => b.riskScore - a.riskScore);
     const allIds = new Set(sorted.map(v => v.id));
     setSelectedIds(allIds);
     
@@ -208,9 +243,6 @@ export default function Dashboard() {
 
     // Get selected vulnerabilities sorted by risk
     const selectedVulns = sortedVulnerabilities.filter(v => selectedIds.has(v.id));
-    
-    // In real app: call API
-    // await fetch('/api/fix', { method: 'POST', body: JSON.stringify({ ids: Array.from(selectedIds) }) });
     
     // Set up the queue
     setPendingQueue(selectedVulns.slice(1)); // All except first
@@ -531,7 +563,7 @@ export default function Dashboard() {
           <AnimatePresence mode="wait">
             {stage === WorkflowStage.LIVE_OPS && currentRemediationVuln && (
               <motion.section
-                key="liveops"
+                key={`liveops-${currentRemediationVuln.id}`}
                 variants={slideVariants}
                 initial="enter"
                 animate="center"
@@ -545,10 +577,13 @@ export default function Dashboard() {
                     file: currentRemediationVuln.file,
                     line: currentRemediationVuln.line,
                     riskScore: currentRemediationVuln.riskScore,
+                    type: currentRemediationVuln.type,
+                    description: currentRemediationVuln.description,
                   }}
                   repoUrl={getGitHubUrl()}
                   onComplete={handleRemediationComplete}
                   onReturn={handleReturnToDashboard}
+                  useRealApi={true}
                 />
               </motion.section>
             )}
