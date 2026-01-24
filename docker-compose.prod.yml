@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: cj_backend
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      # THE MAGIC LINE: Gives backend control over host Docker daemon
+      # This enables Red Team agent to spawn sandbox containers
+      - /var/run/docker.sock:/var/run/docker.sock
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        # ⚠️ REPLACE THIS with your DigitalOcean Droplet IP!
+        - NEXT_PUBLIC_API_URL=http://REPLACE_WITH_SERVER_IP:8000
+    container_name: cj_frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend

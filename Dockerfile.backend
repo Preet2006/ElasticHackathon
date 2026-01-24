@@ -1,0 +1,27 @@
+# Dockerfile.backend
+# Backend API with Docker-in-Docker support for sandbox execution
+
+FROM python:3.11-slim
+
+# Install system tools AND Docker Client (Crucial for Red Team sandbox!)
+RUN apt-get update && apt-get install -y \
+    git \
+    docker.io \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY api.py .
+COPY app/ ./app/
+
+# Expose API port
+EXPOSE 8000
+
+# Run the FastAPI server
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]

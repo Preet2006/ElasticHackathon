@@ -1,0 +1,29 @@
+# Dockerfile.frontend
+# Next.js 14 Frontend for CodeJanitor
+
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files from frontend directory
+COPY frontend/package*.json ./
+
+# Install dependencies (use --legacy-peer-deps if version conflicts)
+RUN npm install --legacy-peer-deps
+
+# Copy the rest of the frontend code
+COPY frontend/ .
+
+# Build-time environment variable for API URL
+# This gets baked into the Next.js build
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+
+# Build the Next.js application
+RUN npm run build
+
+# Expose frontend port
+EXPOSE 3000
+
+# Start the production server
+CMD ["npm", "start"]

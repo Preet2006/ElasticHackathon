@@ -1,0 +1,46 @@
+# .dockerignore
+# Keep Docker images small and secure
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv
+venv
+env
+.env.local
+
+# Node.js (frontend builds its own)
+frontend/node_modules
+frontend/.next
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Logs
+logs
+*.log
+
+# Tests (not needed in production)
+tests
+pytest.ini
+
+# Documentation
+*.md
+!README.md
+
+# Demo files (not needed in production)
+demos
+demo*.py
+check_quotes.py
+debug_imports.py
+test_*.py
