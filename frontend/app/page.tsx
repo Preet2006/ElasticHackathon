@@ -29,23 +29,31 @@ const mockVulnerabilities = [
     file: 'user_loader.py',
     line: 6,
     type: 'Deserialization',
-    riskScore: 8.0,
+    riskScore: 9.0,
   },
   {
     id: 2,
+    title: 'Path Traversal',
+    file: 'backup_service.py',
+    line: 5,
+    type: 'Path Traversal',
+    riskScore: 6.0,
+  },
+  {
+    id: 3,
     title: 'Command Injection',
     file: 'backup_service.py',
     line: 11,
     type: 'Injection',
-    riskScore: 8.0,
+    riskScore: 9.0,
   },
   {
-    id: 3,
+    id: 4,
     title: 'XXE Attack Vector',
     file: 'xml_auth.py',
     line: 4,
     type: 'XXE',
-    riskScore: 8.0,
+    riskScore: 9.0,
   },
 ];
 
@@ -136,10 +144,10 @@ export default function Dashboard() {
       const interval = setInterval(() => {
         count++;
         setMetrics({
-          threats: Math.min(count, 3),
+          threats: Math.min(count, 4),
           scanned: Math.min(count * 400, 1247),
           fixed: 0,
-          riskScore: Math.min(count * 2, 8.0),
+          riskScore: Math.min(count * 2.25, 9.0),
         });
         if (count >= 4) clearInterval(interval);
       }, 100);
@@ -157,6 +165,14 @@ export default function Dashboard() {
         block: 'start'
       });
     }, 100);
+  };
+
+  // Get severity level based on risk score
+  const getSeverity = (riskScore: number) => {
+    if (riskScore >= 9.0) return { label: 'CRITICAL', color: 'red' };
+    if (riskScore >= 7.0) return { label: 'HIGH', color: 'orange' };
+    if (riskScore >= 4.0) return { label: 'MEDIUM', color: 'yellow' };
+    return { label: 'LOW', color: 'blue' };
   };
 
   return (
@@ -303,7 +319,9 @@ export default function Dashboard() {
                 </div>
 
                 <div className="space-y-2">
-                  {mockVulnerabilities.map((vuln, index) => (
+                  {mockVulnerabilities.map((vuln, index) => {
+                    const severity = getSeverity(vuln.riskScore);
+                    return (
                     <motion.div
                       key={vuln.id}
                       initial={{ opacity: 0, x: -20 }}
@@ -321,16 +339,16 @@ export default function Dashboard() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                           {/* Severity Indicator */}
-                          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-red-500/5 border border-red-500/10">
-                            <AlertTriangle className="w-4 h-4 text-red-500/80" />
+                          <div className={`flex items-center justify-center w-10 h-10 rounded-lg bg-${severity.color}-500/5 border border-${severity.color}-500/10`}>
+                            <AlertTriangle className={`w-4 h-4 text-${severity.color}-500/80`} />
                           </div>
 
                           {/* Info */}
                           <div>
                             <div className="flex items-center gap-3 mb-1">
                               <span className="text-zinc-200 font-medium text-sm">{vuln.title}</span>
-                              <span className="px-1.5 py-0.5 text-[9px] font-mono text-red-400/80 bg-red-500/5 rounded border border-red-500/10">
-                                CRITICAL
+                              <span className={`px-1.5 py-0.5 text-[9px] font-mono text-${severity.color}-400/80 bg-${severity.color}-500/5 rounded border border-${severity.color}-500/10`}>
+                                {severity.label}
                               </span>
                             </div>
                             <div className="flex items-center gap-3 text-xs text-zinc-600 font-mono">
@@ -338,7 +356,7 @@ export default function Dashboard() {
                               <span className="text-zinc-800">•</span>
                               <span>Line {vuln.line}</span>
                               <span className="text-zinc-800">•</span>
-                              <span className="text-yellow-600/80">Risk {vuln.riskScore}</span>
+                              <span className="text-yellow-600/80">Risk {vuln.riskScore.toFixed(1)}</span>
                             </div>
                           </div>
                         </div>
@@ -363,7 +381,7 @@ export default function Dashboard() {
                         </motion.button>
                       </div>
                     </motion.div>
-                  ))}
+                  );})}
                 </div>
               </motion.section>
             )}
