@@ -58,65 +58,65 @@ export default function RemediationConsole({
   // Red Team logs sequence
   const redTeamSequence: { text: string; type: LogEntry['type']; delay: number }[] = [
     { text: '═══════════════════════════════════════', type: 'info', delay: 200 },
-    { text: '   🎯 RED TEAM OFFENSIVE OPERATIONS', type: 'info', delay: 300 },
+    { text: '   RED TEAM // OFFENSIVE OPERATIONS', type: 'info', delay: 300 },
     { text: '═══════════════════════════════════════', type: 'info', delay: 200 },
     { text: '', type: 'info', delay: 100 },
     { text: `[TARGET] ${vulnerability.title}`, type: 'recon', delay: 400 },
     { text: `[FILE] ${vulnerability.file}:${vulnerability.line}`, type: 'recon', delay: 300 },
     { text: `[RISK] Score: ${vulnerability.riskScore.toFixed(1)}/10`, type: 'recon', delay: 300 },
     { text: '', type: 'info', delay: 100 },
-    { text: '▶ PHASE 1: RECONNAISSANCE', type: 'recon', delay: 500 },
+    { text: '> PHASE 1: RECONNAISSANCE', type: 'recon', delay: 500 },
     { text: '  ├─ Scanning attack surface...', type: 'recon', delay: 400 },
     { text: '  ├─ Identifying entry points...', type: 'recon', delay: 350 },
     { text: '  ├─ Mapping vulnerable code paths...', type: 'recon', delay: 400 },
-    { text: '  └─ ✓ Recon complete', type: 'success', delay: 300 },
+    { text: '  └─ [OK] Recon complete', type: 'success', delay: 300 },
     { text: '', type: 'info', delay: 100 },
-    { text: '▶ PHASE 2: EXPLOIT PLANNING', type: 'plan', delay: 500 },
+    { text: '> PHASE 2: EXPLOIT PLANNING', type: 'plan', delay: 500 },
     { text: '  ├─ Analyzing vulnerability pattern...', type: 'plan', delay: 400 },
     { text: '  ├─ Crafting exploit payload...', type: 'plan', delay: 450 },
     { text: '  ├─ Preparing sandbox environment...', type: 'plan', delay: 400 },
-    { text: '  └─ ✓ Exploit ready', type: 'success', delay: 300 },
+    { text: '  └─ [OK] Exploit ready', type: 'success', delay: 300 },
     { text: '', type: 'info', delay: 100 },
-    { text: '▶ PHASE 3: EXPLOITATION', type: 'exploit', delay: 600 },
+    { text: '> PHASE 3: EXPLOITATION', type: 'exploit', delay: 600 },
     { text: '  ├─ Deploying payload...', type: 'exploit', delay: 500 },
     { text: '  ├─ Executing in sandbox...', type: 'exploit', delay: 600 },
     { text: '  ├─ Analyzing response...', type: 'exploit', delay: 400 },
     { text: '  └─ Capturing proof of concept...', type: 'exploit', delay: 500 },
     { text: '', type: 'info', delay: 100 },
     { text: '╔═══════════════════════════════════════╗', type: 'success', delay: 200 },
-    { text: '║  ✅ EXPLOIT SUCCESSFUL - CONFIRMED   ║', type: 'success', delay: 300 },
+    { text: '║  EXPLOIT SUCCESSFUL // CONFIRMED     ║', type: 'success', delay: 300 },
     { text: '╚═══════════════════════════════════════╝', type: 'success', delay: 200 },
   ];
 
   // Blue Team logs sequence
   const blueTeamSequence: { text: string; type: LogEntry['type']; delay: number }[] = [
     { text: '═══════════════════════════════════════', type: 'info', delay: 200 },
-    { text: '   🛡️ BLUE TEAM DEFENSIVE OPERATIONS', type: 'info', delay: 300 },
+    { text: '   BLUE TEAM // DEFENSIVE OPERATIONS', type: 'info', delay: 300 },
     { text: '═══════════════════════════════════════', type: 'info', delay: 200 },
     { text: '', type: 'info', delay: 100 },
     { text: '[ALERT] Threat intelligence received', type: 'defense', delay: 400 },
     { text: '[PRIORITY] Initiating rapid response', type: 'defense', delay: 300 },
     { text: '', type: 'info', delay: 100 },
-    { text: '▶ PHASE 1: THREAT ANALYSIS', type: 'defense', delay: 500 },
+    { text: '> PHASE 1: THREAT ANALYSIS', type: 'defense', delay: 500 },
     { text: '  ├─ Reviewing exploit signature...', type: 'defense', delay: 400 },
     { text: '  ├─ Identifying vulnerable pattern...', type: 'defense', delay: 350 },
     { text: '  ├─ Assessing blast radius...', type: 'defense', delay: 400 },
-    { text: '  └─ ✓ Analysis complete', type: 'verify', delay: 300 },
+    { text: '  └─ [OK] Analysis complete', type: 'verify', delay: 300 },
     { text: '', type: 'info', delay: 100 },
-    { text: '▶ PHASE 2: PATCH GENERATION', type: 'patch', delay: 500 },
+    { text: '> PHASE 2: PATCH GENERATION', type: 'patch', delay: 500 },
     { text: '  ├─ Generating secure replacement...', type: 'patch', delay: 450 },
     { text: '  ├─ Applying security controls...', type: 'patch', delay: 400 },
     { text: '  ├─ Validating code integrity...', type: 'patch', delay: 400 },
-    { text: '  └─ ✓ Patch generated', type: 'verify', delay: 300 },
+    { text: '  └─ [OK] Patch generated', type: 'verify', delay: 300 },
     { text: '', type: 'info', delay: 100 },
-    { text: '▶ PHASE 3: VERIFICATION', type: 'verify', delay: 600 },
+    { text: '> PHASE 3: VERIFICATION', type: 'verify', delay: 600 },
     { text: '  ├─ Re-running exploit test...', type: 'verify', delay: 500 },
     { text: '  ├─ Exploit blocked successfully', type: 'verify', delay: 400 },
     { text: '  ├─ Running regression tests...', type: 'verify', delay: 500 },
     { text: '  └─ All tests passing', type: 'verify', delay: 400 },
     { text: '', type: 'info', delay: 100 },
     { text: '╔═══════════════════════════════════════╗', type: 'verify', delay: 200 },
-    { text: '║  ✅ PATCH VERIFIED - THREAT MITIGATED ║', type: 'verify', delay: 300 },
+    { text: '║  PATCH VERIFIED // THREAT MITIGATED  ║', type: 'verify', delay: 300 },
     { text: '╚═══════════════════════════════════════╝', type: 'verify', delay: 200 },
   ];
 
@@ -413,137 +413,115 @@ export default function RemediationConsole({
             transition={{ duration: 0.5, ease: 'easeOut' }}
             className="relative"
           >
-            {/* Glow Effect */}
-            <div className="absolute inset-0 bg-gradient-to-r from-[#00FF41]/20 via-emerald-500/20 to-[#00FF41]/20 rounded-2xl blur-xl" />
-            
             <div className="
-              relative p-8 rounded-2xl
-              bg-zinc-900/80 backdrop-blur-sm
-              border border-[#00FF41]/30
-              shadow-[0_0_60px_rgba(0,255,65,0.15)]
+              relative p-6 rounded-xl
+              bg-zinc-950
+              border border-zinc-800
             ">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-6">
-                  {/* Success Icon */}
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-                    className="
-                      flex items-center justify-center w-16 h-16
-                      bg-[#00FF41]/10 rounded-2xl
-                      border border-[#00FF41]/20
-                    "
-                  >
-                    <GitPullRequest className="w-8 h-8 text-[#00FF41]" />
-                  </motion.div>
-
-                  {/* Text */}
-                  <div>
-                    <motion.h3
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.3 }}
-                      className="text-2xl font-bold text-white mb-1"
-                    >
-                      🚀 Pull Request Created!
-                    </motion.h3>
-                    <motion.p
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.4 }}
-                      className="text-zinc-400 text-sm"
-                    >
-                      Security patch has been submitted for review
-                    </motion.p>
-                    <motion.a
-                      href={prUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 0.5 }}
-                      className="
-                        inline-flex items-center gap-2 mt-3
-                        text-[#00FF41] hover:text-[#00FF41]/80
-                        font-mono text-xs
-                        transition-colors
-                      "
-                    >
-                      <span>View latest Pull Requests →</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </motion.a>
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
+              {/* Header Row */}
+              <div className="flex items-center gap-4 mb-5">
+                {/* Success Icon */}
                 <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.5 }}
-                  className="flex items-center gap-3"
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
+                  className="
+                    flex items-center justify-center w-12 h-12
+                    bg-emerald-500/10 rounded-lg
+                    border border-emerald-500/20
+                  "
                 >
-                  <motion.a
-                    href={prUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="
-                      flex items-center gap-2 px-5 py-3
-                      text-sm font-medium
-                      text-black bg-[#00FF41]
-                      rounded-xl
-                      hover:bg-[#00FF41]/90
-                      shadow-[0_0_30px_rgba(0,255,65,0.3)]
-                      transition-all duration-300
-                    "
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    View PR
-                  </motion.a>
-                  
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={onReturn}
-                    className="
-                      flex items-center gap-2 px-5 py-3
-                      text-sm font-medium
-                      text-zinc-300 bg-zinc-800
-                      border border-zinc-700
-                      rounded-xl
-                      hover:bg-zinc-700 hover:text-white
-                      transition-all duration-300
-                    "
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                    Return to Dashboard
-                  </motion.button>
+                  <GitPullRequest className="w-5 h-5 text-emerald-500" />
                 </motion.div>
+
+                {/* Text */}
+                <div>
+                  <motion.h3
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="text-lg font-semibold text-white"
+                  >
+                    Pull Request Created
+                  </motion.h3>
+                  <motion.p
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.4 }}
+                    className="text-zinc-500 text-sm"
+                  >
+                    Security patch has been submitted for review
+                  </motion.p>
+                </div>
               </div>
+
+              {/* Action Buttons */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+                className="flex items-center gap-3"
+              >
+                <motion.a
+                  href={prUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.99 }}
+                  className="
+                    flex items-center gap-2 px-4 py-2
+                    text-sm font-medium
+                    text-white bg-zinc-800
+                    border border-zinc-700
+                    rounded-lg
+                    hover:bg-zinc-700
+                    transition-all duration-200
+                  "
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  View PR
+                </motion.a>
+                
+                <motion.button
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.99 }}
+                  onClick={onReturn}
+                  className="
+                    flex items-center gap-2 px-4 py-2
+                    text-sm font-medium
+                    text-zinc-400
+                    border border-zinc-800
+                    rounded-lg
+                    hover:text-white hover:border-zinc-700
+                    transition-all duration-200
+                  "
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Dashboard
+                </motion.button>
+              </motion.div>
 
               {/* Summary Stats */}
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.6 }}
-                className="flex items-center gap-6 mt-6 pt-6 border-t border-white/5"
+                className="flex items-center gap-6 mt-6 pt-5 border-t border-zinc-800/50"
               >
-                <div className="flex items-center gap-2 text-xs text-zinc-500">
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
+                <div className="flex items-center gap-2 text-xs text-zinc-600">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-zinc-600" />
                   <span>Exploit Confirmed</span>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-zinc-500">
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
+                <div className="flex items-center gap-2 text-xs text-zinc-600">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-zinc-600" />
                   <span>Patch Generated</span>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-zinc-500">
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
+                <div className="flex items-center gap-2 text-xs text-zinc-600">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-zinc-600" />
                   <span>Tests Passing</span>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-zinc-500">
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
+                <div className="flex items-center gap-2 text-xs text-zinc-600">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-zinc-600" />
                   <span>PR Created</span>
                 </div>
               </motion.div>
