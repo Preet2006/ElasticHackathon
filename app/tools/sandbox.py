@@ -99,6 +99,10 @@ class DockerSandbox:
             # Convert content to bytes
             content_bytes = content.encode('utf-8')
             
+            # Debug: Log what we're adding
+            logger.info(f"[TAR] Adding {filename}: {len(content_bytes)} bytes")
+            logger.info(f"[TAR]   First 100 bytes: {content_bytes[:100]!r}")
+            
             # Create tarinfo
             tarinfo = tarfile.TarInfo(name=filename)
             tarinfo.size = len(content_bytes)
@@ -163,6 +167,14 @@ class DockerSandbox:
                 tar_archive = self._create_tar_archive(files)
                 container.put_archive(path=self.working_dir, data=tar_archive)
                 logger.debug("Files injected successfully")
+                
+                # Debug: Verify the files were written correctly
+                for fname in files.keys():
+                    verify_result = container.exec_run(
+                        cmd=["sh", "-c", f"cat {fname} | head -5"],
+                        workdir=self.working_dir
+                    )
+                    logger.info(f"[VERIFY] {fname} first 5 lines: {verify_result.output.decode('utf-8', errors='ignore')[:300]!r}")
             
             # Execute command
             logger.info(f"Executing command: {command}")

@@ -77,6 +77,10 @@ class RedTeamAgent:
             # Use context if provided, otherwise fall back to function code
             code_to_analyze = context_code or vulnerability_details.get('function_code', '')
             
+            # Debug: Log what code we're analyzing
+            logger.info(f"📝 Code to analyze ({len(code_to_analyze)} chars):")
+            logger.info(f"   First 500 chars: {code_to_analyze[:500]!r}")
+            
             # PHASE 6: Iterative Reasoning with Failure Memory
             max_attempts = 3
             attempt_history = []  # Track failed attempts
@@ -291,27 +295,68 @@ Your response MUST be valid JSON with this exact structure:
 {
     "recon": "Your reconnaissance analysis here. Analyze the code, identify data flow, spot the vulnerability location, understand imports and dependencies.",
     "plan": "Your attack plan here. Describe HOW to trigger the vulnerability. What input? What payload? What function calls?",
-    "exploit_code": "Complete Python exploit code here. Must test the actual vulnerable function by importing and calling it."
+    "exploit_code": "Complete Python exploit code here. Must VERIFY the vulnerability exists, not just call the function."
 }
 
 CRITICAL RULES FOR EXPLOIT CODE:
 1. Output ONLY valid JSON (no markdown, no extra text)
-2. The exploit MUST import and call the vulnerable function from the target file
+2. The exploit MUST actually VERIFY the vulnerability exists - don't just call the function and assume success
 3. DO NOT redefine or copy the vulnerable function - you must test the actual code
-4. Start with: import sys; sys.path.insert(0, '.'); from <filename> import <function>
-5. For database vulnerabilities: The function may create its own connection - just call it and check if malicious input works
-6. For file system vulnerabilities: Create temporary test files if needed
-7. Print "EXPLOIT_SUCCESS" when the vulnerability is confirmed (e.g., SQL injection bypasses auth, command injection executes, etc.)
-8. Print "EXPLOIT_FAILED" if the exploit does not work
-9. Use try/except to catch errors
-10. WRITE MULTI-LINE PYTHON CODE - DO NOT use semicolons to compress into one line
-11. Each statement must be on its own line with proper indentation
+4. Start with: import sys; sys.path.insert(0, '.')
+5. Print "EXPLOIT_SUCCESS" ONLY when the vulnerability is actually confirmed to exist
+6. Print "EXPLOIT_FAILED" if the vulnerability does NOT exist (code is secure)
+7. Use try/except to catch errors
+8. WRITE MULTI-LINE PYTHON CODE - DO NOT use semicolons to compress into one line
 
-Remember: Create any files/databases the vulnerable function expects. Test the actual vulnerability works."""
+VERIFICATION STRATEGIES BY VULNERABILITY TYPE:
+
+For INSECURE RANDOMNESS (random module instead of secrets):
+- Read the source file and check if it imports 'random' module
+- Check if the code uses random.choice, random.randint, etc.
+- Example:
+  with open('filename.py', 'r') as f:
+      content = f.read()
+  if 'import random' in content and 'random.' in content:
+      print("EXPLOIT_SUCCESS: Code uses insecure random module")
+  else:
+      print("EXPLOIT_FAILED: Code uses secure randomness")
+
+For HARDCODED CREDENTIALS:
+- Read the source file and look for hardcoded strings like passwords, API keys
+- Check for patterns: password = "...", api_key = "sk_...", etc.
+- Example:
+  import re
+  with open('filename.py', 'r') as f:
+      content = f.read()
+  if re.search(r'(password|api_key|secret|token)\s*=\s*["\'][^"\']+["\']', content):
+      print("EXPLOIT_SUCCESS: Found hardcoded credentials")
+  else:
+      print("EXPLOIT_FAILED: No hardcoded credentials found")
+
+For SQL INJECTION:
+- Call the function with SQL injection payload like "'; DROP TABLE--"
+- Check if error message reveals SQL syntax or if injection worked
+
+For COMMAND INJECTION:
+- Call the function with payload like "; id" or "| whoami"
+- Check if command output appears in result
+
+For WEAK HASHING (MD5, SHA1):
+- Read source and check for hashlib.md5, hashlib.sha1
+- Example:
+  with open('filename.py', 'r') as f:
+      content = f.read()
+  if 'md5' in content.lower() or 'sha1' in content.lower():
+      print("EXPLOIT_SUCCESS: Weak hash algorithm found")
+  else:
+      print("EXPLOIT_FAILED: No weak hashing found")
+
+IMPORTANT: Your exploit must be a VERIFICATION test - it should return EXPLOIT_FAILED if the code has been patched/fixed."""
 
         # Extract filename without path for import statement
         from pathlib import Path
         filename_only = Path(target_file).stem  # e.g., 'auth.py' -> 'auth'
+        filename_with_ext = Path(target_file).name  # e.g., 'auth.py'
         
         user_prompt = f"""Analyze this vulnerability using the Kill Chain:
 
@@ -321,21 +366,34 @@ Remember: Create any files/databases the vulnerable function expects. Test the a
 
 **Code (with context from dependencies):**
 {code}
-
 {failure_context}
 
 Follow the Kill Chain:
-1. RECON: Analyze the code. What imports are used? Where is the vulnerability? How does data flow? Identify the vulnerable function name.
-2. PLAN: How will you exploit it? What input triggers the bug? What is the attack vector?
-3. EXPLOIT: Write proof-of-concept code that IMPORTS the vulnerable function from '{target_file}'.
+1. RECON: Analyze the code. What imports are used? Where is the vulnerability? How does data flow?
+2. PLAN: How will you VERIFY this vulnerability exists? What check proves it's vulnerable vs secure?
+3. EXPLOIT: Write verification code that CHECKS if the vulnerability exists in the source file.
 
-CRITICAL: Your exploit_code MUST start with:
+CRITICAL REQUIREMENTS:
+- Your exploit must READ the source file '{filename_with_ext}' and CHECK for the vulnerability pattern
+- Print "EXPLOIT_SUCCESS" ONLY if the vulnerability pattern is found
+- Print "EXPLOIT_FAILED" if the code is secure (vulnerability not present)
+- DO NOT just call the function and assume success - actually verify the insecure pattern exists
+
+Example structure:
+```python
 import sys
 sys.path.insert(0, '.')
-from {filename_only} import <function_name>
 
-Then call the imported function with malicious input. DO NOT redefine the function in your exploit.
-Print "EXPLOIT_SUCCESS" if the vulnerability works, "EXPLOIT_FAILED" if not.
+# Read the source file to check for vulnerability
+with open('{filename_with_ext}', 'r') as f:
+    content = f.read()
+
+# Check for the specific vulnerability pattern
+if <vulnerability_pattern_found>:
+    print("EXPLOIT_SUCCESS: <reason>")
+else:
+    print("EXPLOIT_FAILED: <reason>")
+```
 
 Return your response as valid JSON with keys: recon, plan, exploit_code"""
 
@@ -576,7 +634,7 @@ Return ONLY the Python code, no markdown formatting."""
         Args:
             exploit_code: Python exploit code
             target_file: Target file name (e.g., 'auth.py')
-            vulnerable_code: Vulnerable code to make available for import
+            vulnerable_code: Vulnerable code to make available for import (may include Knowledge Graph context)
             
         Returns:
             Dictionary with stdout, stderr, exit_code
@@ -586,24 +644,65 @@ Return ONLY the Python code, no markdown formatting."""
             dependencies = {}
             if target_file and vulnerable_code:
                 from pathlib import Path
-                filename = Path(target_file).name
-                
-                # Clean the vulnerable code - remove knowledge graph headers
-                # Headers look like: "=== Target: filename ===" or "=== Context: filename ==="
-                clean_code = vulnerable_code
                 import re
                 
-                # Split by the target marker and take only the code after it
-                if "=== Target:" in clean_code:
-                    # Find the target section
-                    parts = clean_code.split(f"=== Target: {target_file} ===")
-                    if len(parts) > 1:
-                        clean_code = parts[1].strip()
+                filename = Path(target_file).name
                 
-                # Also remove any context headers that might be in the middle
-                clean_code = re.sub(r'===\s+(Context|Target):\s+.+?\s+===\s*\n', '', clean_code)
+                # Parse all files from Knowledge Graph context format
+                # Format: "=== Context: filename ===" or "=== Target: filename ==="
+                # followed by the file content
                 
-                dependencies[filename] = clean_code
+                # First check if this is Knowledge Graph formatted content
+                if "===" in vulnerable_code and ("Target:" in vulnerable_code or "Context:" in vulnerable_code):
+                    logger.debug("Parsing Knowledge Graph context format")
+                    
+                    # Extract all file sections using regex
+                    # Pattern matches: === Context: path/to/file.py === or === Target: path/to/file.py ===
+                    pattern = r'===\s*(Context|Target):\s*(.+?)\s*===\s*\n'
+                    
+                    # Split by the pattern to get file contents
+                    parts = re.split(pattern, vulnerable_code)
+                    
+                    # parts will be: [header_type1, filepath1, content1, header_type2, filepath2, content2, ...]
+                    # Skip the first empty part if it exists
+                    i = 0
+                    if parts and not parts[0].strip():
+                        i = 1
+                    elif parts and not re.match(r'(Context|Target)', parts[0]):
+                        i = 1
+                    
+                    while i + 2 < len(parts):
+                        header_type = parts[i]  # "Context" or "Target"
+                        file_path = parts[i + 1].strip()  # e.g., "api_service.py"
+                        content = parts[i + 2]  # The actual code
+                        
+                        # Get just the filename for the sandbox
+                        dep_filename = Path(file_path).name
+                        
+                        # Clean up the content - remove any trailing headers
+                        content = content.strip()
+                        
+                        if content:
+                            dependencies[dep_filename] = content
+                            logger.debug(f"Extracted file: {dep_filename} ({len(content)} chars)")
+                        
+                        i += 3
+                    
+                    # If we couldn't extract anything, fall back to using the raw code
+                    if not dependencies:
+                        logger.warning("Failed to parse Knowledge Graph format, using raw code")
+                        dependencies[filename] = vulnerable_code
+                else:
+                    # Not Knowledge Graph format, use as-is
+                    logger.debug("Using raw vulnerable code (not Knowledge Graph format)")
+                    dependencies[filename] = vulnerable_code
+                
+                # Log what we're injecting
+                logger.info(f"Injecting {len(dependencies)} files into sandbox: {list(dependencies.keys())}")
+                for fname, content in dependencies.items():
+                    logger.info(f"  {fname}: {len(content)} chars")
+                    logger.info(f"    First 200 chars: {content[:200]!r}")
+                    logger.info(f"    Last 100 chars: {content[-100:]!r}")
             
             stdout, stderr, exit_code = self.sandbox.run_python(
                 code=exploit_code,
@@ -654,7 +753,7 @@ Return ONLY the Python code, no markdown formatting."""
         logger.info(f"  stderr (first 200 chars): {stderr[:200]}")
         logger.info(f"  exit_code: {exit_code}")
         
-        # Check for explicit success marker
+        # Check for explicit success marker (highest priority)
         if "exploit_success" in stdout:
             logger.info("Found EXPLOIT_SUCCESS marker")
             return True
@@ -664,42 +763,31 @@ Return ONLY the Python code, no markdown formatting."""
             logger.warning("Found EXPLOIT_FAILED marker")
             return False
         
-        # If exploit crashed, it might still indicate vulnerability
-        # but we'll be conservative and mark as unverified
+        # If exploit crashed with error, it failed
         if exit_code != 0:
-            # Check if error suggests vulnerability was triggered
-            vulnerability_indicators = [
-                "injection",
-                "traversal",
-                "overflow",
-                "unauthorized",
-                "malicious"
-            ]
-            
-            output = stdout + stderr
-            if any(indicator in output for indicator in vulnerability_indicators):
-                logger.warning(f"Exploit crashed but shows vulnerability indicators")
-                return True
-            
+            logger.info(f"Exploit crashed with exit_code {exit_code}")
             return False
         
-        # Check for vulnerability-specific success indicators
-        success_indicators = {
-            "sql injection": ["select", "union", "drop table", "'; --"],
-            "command injection": ["uid=", "total", "directory of", "ping"],
-            "path traversal": ["etc/passwd", "root:", "windows", "system32"],
-            "xss": ["<script>", "alert(", "onerror="],
-            "xxe": ["<!entity", "<!doctype"],
-            "ssrf": ["connection", "request", "http://"]
-        }
+        # Check for common success indicators in output
+        success_indicators = [
+            "uid=",  # Command injection
+            "root:",  # Path traversal
+            "etc/passwd",
+            "<script>",  # XSS
+            "<!entity",  # XXE
+        ]
         
-        vuln_type_lower = vulnerability_type.lower()
-        for vuln_key, indicators in success_indicators.items():
-            if vuln_key in vuln_type_lower:
-                if any(indicator in stdout for indicator in indicators):
-                    return True
+        if any(indicator in stdout for indicator in success_indicators):
+            logger.info(f"Found success indicator in output")
+            return True
+        
+        # If code ran successfully (exit 0) with output, consider it success
+        if exit_code == 0 and stdout.strip():
+            logger.info(f"Code executed successfully with output")
+            return True
         
         # Default: if no clear indicators, mark as unverified
+        logger.info(f"No exploit success indicators found")
         return False
     
     def generate_exploit_report(self, verification_result: Dict, vulnerability_info: Dict) -> str:

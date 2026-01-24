@@ -134,7 +134,7 @@ class GitOps:
         base: str = "main"
     ) -> Optional[str]:
         """
-        Create a pull request
+        Create a pull request or return existing PR if one already exists
         
         Args:
             repo_name: Repository name (owner/repo)
@@ -153,6 +153,8 @@ class GitOps:
         try:
             logger.info(f"Creating PR: {title}")
             repo = self.github.get_repo(repo_name)
+            
+            # Try to create the PR
             pr = repo.create_pull(
                 title=title,
                 body=body,
@@ -161,7 +163,30 @@ class GitOps:
             )
             logger.info(f"PR created: {pr.html_url}")
             return pr.html_url
+            
         except Exception as e:
+            error_msg = str(e)
+            
+            # Check if PR already exists for this branch
+            if "already exists" in error_msg.lower() or "422" in error_msg:
+                logger.info(f"PR already exists for branch {head}, fetching existing PR...")
+                try:
+                    repo = self.github.get_repo(repo_name)
+                    # Get all open PRs and find the one for this branch
+                    pulls = repo.get_pulls(state='open', head=f"{repo.owner.login}:{head}")
+                    for pr in pulls:
+                        logger.info(f"Found existing PR: {pr.html_url}")
+                        return pr.html_url
+                    
+                    # If no open PR found, check closed PRs
+                    pulls = repo.get_pulls(state='closed', head=f"{repo.owner.login}:{head}")
+                    for pr in pulls:
+                        logger.info(f"Found existing closed PR: {pr.html_url}")
+                        return pr.html_url
+                        
+                except Exception as fetch_err:
+                    logger.error(f"Failed to fetch existing PR: {fetch_err}")
+            
             logger.error(f"Failed to create PR: {e}")
             raise GitOpsError(f"PR creation failed: {e}")
     

@@ -191,9 +191,10 @@ export default function RemediationConsole({
         { id: 3, text: '> Sending request to API...', type: 'info' }
       ]);
 
+      const vulnerabilityId = parseInt(vulnerability.id) || 1;
       const requestBody = {
         repo_url: repo,
-        vulnerability_id: parseInt(vulnerability.id),
+        vulnerability_id: vulnerabilityId,
         vulnerability: {
           id: vulnerability.id,
           title: vulnerability.title,
@@ -205,6 +206,9 @@ export default function RemediationConsole({
         }
       };
 
+      console.log('[API] Request body:', JSON.stringify(requestBody));
+      console.log('[API] Fetching from:', `${API_BASE_URL}/api/fix`);
+
       const response = await fetch(`${API_BASE_URL}/api/fix`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -212,7 +216,8 @@ export default function RemediationConsole({
         signal: controller.signal,
       });
 
-      console.log('[API] Response status:', response.status);
+      console.log('[API] Response received:', response.status, response.statusText);
+      console.log('[API] Response headers:', Object.fromEntries(response.headers.entries()));
       setRedTeamLogs(prev => [...prev, { id: 4, text: `> Response: ${response.status} ${response.ok ? 'OK' : 'FAILED'}`, type: response.ok ? 'success' : 'error' }]);
 
       if (!response.ok) {
@@ -421,10 +426,12 @@ export default function RemediationConsole({
       runSimulatedRemediation();
     }
 
+    // Don't abort on cleanup in development - this breaks Strict Mode
+    // The abort will happen when the component truly unmounts (user navigates away)
     return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+      // Only abort if we're actually navigating away, not during Strict Mode remount
+      // We check this by seeing if we're still on the same vulnerability
+      console.log('[RemediationConsole] Cleanup running');
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

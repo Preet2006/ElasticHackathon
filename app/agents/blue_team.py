@@ -84,11 +84,12 @@ class BlueTeamAgent:
             - error: str - Error message if failed
         """
         logger.info(f"🛡️ Starting patch generation for {target_file}")
+        logger.info(f"Vulnerability type: {vulnerability_type}")
         
         # Step 0: Verify the exploit works on vulnerable code
         logger.info("Step 0: Verifying exploit works on vulnerable code...")
         baseline_result = self._run_exploit_verification(
-            target_file, current_content, exploit_code
+            target_file, current_content, exploit_code, vulnerability_type
         )
         
         if not baseline_result.get("exploit_succeeded", False):
@@ -150,7 +151,7 @@ class BlueTeamAgent:
                 # Verify patch by running exploit
                 logger.info("🧪 Running exploit against patched code...")
                 verification = self._run_exploit_verification(
-                    target_file, patched_content, exploit_code
+                    target_file, patched_content, exploit_code, vulnerability_type
                 )
                 
                 # Check if exploit failed (meaning patch worked!)
@@ -368,7 +369,8 @@ Return ONLY the fixed Python code with NO markdown formatting."""
         self,
         target_file: str,
         code_content: str,
-        exploit_code: str
+        exploit_code: str,
+        vulnerability_type: str = ""
     ) -> Dict:
         """
         Run exploit against code to verify patch
@@ -377,6 +379,7 @@ Return ONLY the fixed Python code with NO markdown formatting."""
             target_file: Target file name
             code_content: Code to test (vulnerable or patched)
             exploit_code: Exploit script
+            vulnerability_type: Type of vulnerability being tested
             
         Returns:
             Dictionary with stdout, stderr, exit_code, and exploit_succeeded flag
@@ -385,6 +388,11 @@ Return ONLY the fixed Python code with NO markdown formatting."""
             # Extract just the filename
             filename = Path(target_file).name
             
+            logger.info(f"Running exploit verification for {filename}")
+            logger.info(f"Vulnerability type: {vulnerability_type}")
+            logger.info(f"Code content length: {len(code_content)}")
+            logger.info(f"Exploit code length: {len(exploit_code)}")
+            
             # Run exploit in sandbox with target file as dependency
             stdout, stderr, exit_code = self.sandbox.run_python(
                 code=exploit_code,
@@ -392,8 +400,12 @@ Return ONLY the fixed Python code with NO markdown formatting."""
                 timeout=10
             )
             
+            logger.info(f"Exploit execution result: exit_code={exit_code}")
+            logger.info(f"stdout: {stdout[:300] if stdout else 'empty'}...")
+            logger.info(f"stderr: {stderr[:300] if stderr else 'empty'}...")
+            
             # Analyze if exploit succeeded (same logic as Red Team)
-            exploit_succeeded = self._analyze_exploit_result(stdout, stderr, exit_code)
+            exploit_succeeded = self._analyze_exploit_result(stdout, stderr, exit_code, vulnerability_type)
             
             return {
                 "output": stdout,
@@ -411,15 +423,15 @@ Return ONLY the fixed Python code with NO markdown formatting."""
                 "exploit_succeeded": False
             }
     
-    def _analyze_exploit_result(self, stdout: str, stderr: str, exit_code: int) -> bool:
+    def _analyze_exploit_result(self, stdout: str, stderr: str, exit_code: int, vulnerability_type: str = "") -> bool:
         """
         Analyze exploit execution result to determine if it succeeded.
-        Uses same logic as Red Team for consistency.
         
         Args:
             stdout: Standard output from exploit
             stderr: Standard error from exploit  
             exit_code: Exit code from exploit
+            vulnerability_type: Type of vulnerability being tested
             
         Returns:
             True if exploit succeeded, False otherwise
@@ -427,30 +439,24 @@ Return ONLY the fixed Python code with NO markdown formatting."""
         stdout_lower = stdout.lower()
         stderr_lower = stderr.lower()
         
-        # Check for explicit success marker
+        logger.info(f"Analyzing exploit result:")
+        logger.info(f"  stdout (first 200 chars): {stdout_lower[:200]}")
+        logger.info(f"  stderr (first 200 chars): {stderr_lower[:200]}")
+        logger.info(f"  exit_code: {exit_code}")
+        
+        # Check for explicit success marker (highest priority)
         if "exploit_success" in stdout_lower:
+            logger.info("Found EXPLOIT_SUCCESS marker")
             return True
         
         # Check for explicit failure marker
         if "exploit_failed" in stdout_lower:
+            logger.warning("Found EXPLOIT_FAILED marker")
             return False
         
-        # If exploit crashed, check if it shows vulnerability indicators
+        # If exploit crashed with error, it failed
         if exit_code != 0:
-            vulnerability_indicators = [
-                "injection",
-                "traversal",
-                "overflow", 
-                "unauthorized",
-                "malicious",
-                "hacked",
-                "pwned",
-                "rce",
-                "shell"
-            ]
-            output = stdout_lower + stderr_lower
-            if any(indicator in output for indicator in vulnerability_indicators):
-                return True
+            logger.info(f"Exploit crashed with exit_code {exit_code}")
             return False
         
         # Check for common success indicators in output
@@ -458,14 +464,20 @@ Return ONLY the fixed Python code with NO markdown formatting."""
             "uid=",  # Command injection showing user id
             "root:",  # Path traversal showing /etc/passwd
             "etc/passwd",
-            "select",  # SQL injection
             "<script>",  # XSS
             "<!entity",  # XXE
         ]
         
         if any(indicator in stdout_lower for indicator in success_indicators):
+            logger.info(f"Found success indicator in output")
             return True
         
+        # If code ran successfully (exit 0) with output, consider it success
+        if exit_code == 0 and stdout_lower.strip():
+            logger.info(f"Code executed successfully with output")
+            return True
+        
+        logger.info(f"No exploit success indicators found")
         return False
     
     def generate_patch_report(

@@ -373,8 +373,16 @@ async def fix_vulnerability(request: FixRequest):
             context_code = None
             if knowledge_base:
                 try:
+                    # Log available files in knowledge base
+                    logger.info(f"Knowledge base files: {list(knowledge_base.file_contents.keys())}")
+                    logger.info(f"Looking for context for: {vuln.get('file', '')}")
+                    
                     context_code = knowledge_base.get_context(vuln.get('file', ''), depth=1)
-                except Exception:
+                    logger.info(f"Got context ({len(context_code) if context_code else 0} chars)")
+                    if context_code:
+                        logger.info(f"Context preview: {context_code[:300]!r}")
+                except Exception as e:
+                    logger.error(f"Failed to get context: {e}")
                     pass
             
             exploit_result = red_team.run_validation(
@@ -556,6 +564,8 @@ async def fix_vulnerability(request: FixRequest):
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
+            "Access-Control-Allow-Origin": "http://localhost:3000",
+            "Access-Control-Allow-Credentials": "true",
         }
     )
 
