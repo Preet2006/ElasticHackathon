@@ -24,6 +24,7 @@ interface Vulnerability {
 interface RemediationConsoleProps {
   vulnerability: Vulnerability;
   repoUrl: string;
+  prUrl?: string; // Optional: actual PR URL from backend API
   onComplete: () => void;
   onReturn: () => void;
 }
@@ -36,7 +37,8 @@ interface LogEntry {
 
 export default function RemediationConsole({ 
   vulnerability, 
-  repoUrl, 
+  repoUrl,
+  prUrl: externalPrUrl, 
   onComplete, 
   onReturn 
 }: RemediationConsoleProps) {
@@ -45,10 +47,13 @@ export default function RemediationConsole({
   const [blueTeamLogs, setBlueTeamLogs] = useState<LogEntry[]>([]);
   const [currentTypingRed, setCurrentTypingRed] = useState('');
   const [currentTypingBlue, setCurrentTypingBlue] = useState('');
-  const [prNumber] = useState(Math.floor(Math.random() * 100) + 100);
   
   const redTeamRef = useRef<HTMLDivElement>(null);
   const blueTeamRef = useRef<HTMLDivElement>(null);
+
+  // Use external PR URL if provided, otherwise link to latest PRs
+  // Format: https://github.com/owner/repo/pulls?q=is%3Apr+is%3Aopen+sort%3Acreated-desc
+  const prUrl = externalPrUrl || `${repoUrl}/pulls?q=is%3Apr+sort%3Acreated-desc`;
 
   // Red Team logs sequence
   const redTeamSequence: { text: string; type: LogEntry['type']; delay: number }[] = [
@@ -228,8 +233,6 @@ export default function RemediationConsole({
       default: return 'text-zinc-500';
     }
   };
-
-  const prUrl = `${repoUrl}/pull/${prNumber}`;
 
   return (
     <motion.div
@@ -463,12 +466,12 @@ export default function RemediationConsole({
                       className="
                         inline-flex items-center gap-2 mt-3
                         text-[#00FF41] hover:text-[#00FF41]/80
-                        font-mono text-sm
+                        font-mono text-xs
                         transition-colors
                       "
                     >
-                      <span>{prUrl}</span>
-                      <ExternalLink className="w-4 h-4" />
+                      <span>View latest Pull Requests →</span>
+                      <ExternalLink className="w-3 h-3" />
                     </motion.a>
                   </div>
                 </div>
@@ -541,7 +544,7 @@ export default function RemediationConsole({
                 </div>
                 <div className="flex items-center gap-2 text-xs text-zinc-500">
                   <CheckCircle2 className="w-4 h-4 text-green-500" />
-                  <span>PR #{prNumber} Created</span>
+                  <span>PR Created</span>
                 </div>
               </motion.div>
             </div>
