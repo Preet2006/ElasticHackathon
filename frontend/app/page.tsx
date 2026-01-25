@@ -541,9 +541,9 @@ export default function Dashboard() {
                 {/* Metrics Cards */}
                 <BentoGrid>
                   <BentoCard
-                    title="Threats Detected"
-                    value={metrics.threats}
-                    subtitle="Critical"
+                    title="Threats Remaining"
+                    value={vulnerabilities.length - remediatedIds.size}
+                    subtitle="To Fix"
                     icon={AlertTriangle}
                     accent="red"
                     delay={0.1}
@@ -644,6 +644,7 @@ export default function Dashboard() {
                   onComplete={handleRemediationComplete}
                   onReturn={handleReturnToDashboard}
                   useRealApi={true}
+                  hideCompletionUI={isAutoMode}
                 />
               </motion.section>
             )}

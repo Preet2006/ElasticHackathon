@@ -32,6 +32,7 @@ interface RemediationConsoleProps {
   onComplete: (prUrl?: string) => void; // Updated to pass PR URL
   onReturn: () => void;
   useRealApi?: boolean; // Whether to use real API or simulated
+  hideCompletionUI?: boolean; // Hide the completion UI and just call onComplete
 }
 
 interface LogEntry {
@@ -46,7 +47,8 @@ export default function RemediationConsole({
   prUrl: externalPrUrl, 
   onComplete, 
   onReturn,
-  useRealApi = true  // Use real API with streaming
+  useRealApi = true,  // Use real API with streaming
+  hideCompletionUI = false // By default show completion UI
 }: RemediationConsoleProps) {
   // Debug: Log component render
   console.log('[RemediationConsole] Rendering with props:', { vulnerability, repoUrl, useRealApi });
@@ -636,7 +638,7 @@ export default function RemediationConsole({
 
       {/* Success State - PR Generation */}
       <AnimatePresence>
-        {stage === 'completed' && (
+        {stage === 'completed' && !hideCompletionUI && (
           <motion.div
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
