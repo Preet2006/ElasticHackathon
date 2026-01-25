@@ -313,21 +313,8 @@ export default function Dashboard() {
         animate={{ scale: 1, opacity: 1 }}
         transition={{ duration: 0.5 }}
       >
-        <div className="relative">
-          <Shield className="w-9 h-9 text-[#00FF41]" />
-          <motion.div
-            className="absolute inset-0"
-            animate={{ scale: [1, 1.3, 1], opacity: [0.5, 0, 0.5] }}
-            transition={{ duration: 2.5, repeat: Infinity }}
-          >
-            <Shield className="w-9 h-9 text-[#00FF41]" />
-          </motion.div>
-        </div>
         <span className="text-xl font-medium text-white tracking-tight">
           CodeJanitor
-        </span>
-        <span className="px-2 py-0.5 text-[10px] font-mono text-[#00FF41]/80 bg-[#00FF41]/5 rounded border border-[#00FF41]/10">
-          v2.0
         </span>
       </motion.div>
 
@@ -377,14 +364,6 @@ export default function Dashboard() {
           icon={CheckCircle2}
           accent="green"
           delay={0.3}
-        />
-        <BentoCard
-          title="Risk Score"
-          value={metrics.riskScore.toFixed(1)}
-          subtitle="CVSS"
-          icon={Activity}
-          accent="yellow"
-          delay={0.4}
         />
       </BentoGrid>
     </motion.section>
@@ -494,14 +473,6 @@ export default function Dashboard() {
             )}
           </AnimatePresence>
 
-          {/* Metrics - Show after scanning */}
-          <AnimatePresence>
-            {(stage === WorkflowStage.STRATEGY_SELECTION || 
-              stage === WorkflowStage.MANUAL_SELECTION) && (
-              renderMetrics()
-            )}
-          </AnimatePresence>
-
           {/* Vulnerability List - Blurred during strategy selection */}
           <AnimatePresence mode="wait">
             {(stage === WorkflowStage.STRATEGY_SELECTION || 
@@ -513,11 +484,40 @@ export default function Dashboard() {
                 animate="center"
                 exit="exit"
                 className={`
-                  space-y-4 transition-all duration-500
+                  space-y-6 transition-all duration-500
                   ${stage === WorkflowStage.STRATEGY_SELECTION ? 'blur-sm opacity-50' : ''}
                 `}
               >
-                <div className="flex items-center justify-between mb-6">
+                {/* Metrics Cards */}
+                <BentoGrid>
+                  <BentoCard
+                    title="Threats Detected"
+                    value={metrics.threats}
+                    subtitle="Critical"
+                    icon={AlertTriangle}
+                    accent="red"
+                    delay={0.1}
+                  />
+                  <BentoCard
+                    title="Lines Scanned"
+                    value={metrics.scanned.toLocaleString()}
+                    subtitle="Analysis"
+                    icon={Code2}
+                    accent="blue"
+                    delay={0.2}
+                  />
+                  <BentoCard
+                    title="Auto-Fixed"
+                    value={metrics.fixed}
+                    subtitle="Patches"
+                    icon={CheckCircle2}
+                    accent="green"
+                    delay={0.3}
+                  />
+                </BentoGrid>
+
+                {/* Vulnerability List Header */}
+                <div className="flex items-center justify-between mt-8 mb-4">
                   <h2 className="text-sm font-medium text-zinc-400 flex items-center gap-2 uppercase tracking-wider">
                     <FileWarning className="w-4 h-4 text-red-500" />
                     Detected Vulnerabilities
@@ -562,9 +562,9 @@ export default function Dashboard() {
             )}
           </AnimatePresence>
 
-          {/* Floating Execute Button - Manual Selection */}
+          {/* Floating Execute Button - Only when items selected */}
           <AnimatePresence>
-            {stage === WorkflowStage.MANUAL_SELECTION && (
+            {stage === WorkflowStage.MANUAL_SELECTION && selectedIds.size > 0 && (
               renderFloatingExecuteButton()
             )}
           </AnimatePresence>
@@ -767,20 +767,7 @@ export default function Dashboard() {
             )}
           </AnimatePresence>
 
-          {/* Footer */}
-          <AnimatePresence>
-            {stage === WorkflowStage.IDLE && (
-              <motion.footer 
-                variants={fadeUp}
-                className="pt-16 pb-8 text-center"
-              >
-                <div className="h-px bg-gradient-to-r from-transparent via-white/5 to-transparent mb-8" />
-                <p className="text-[10px] text-zinc-700 font-mono uppercase tracking-widest">
-                  Powered by AI • Secured by Design • Built for Developers
-                </p>
-              </motion.footer>
-            )}
-          </AnimatePresence>
+
         </motion.div>
       </div>
 
