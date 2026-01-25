@@ -129,6 +129,9 @@ export default function Dashboard() {
   const [remediatedIds, setRemediatedIds] = useState<Set<number>>(new Set());
   const [pendingQueue, setPendingQueue] = useState<Vulnerability[]>([]);
   const [prUrls, setPrUrls] = useState<Map<number, string>>(new Map());
+  const [isAutoMode, setIsAutoMode] = useState(false);
+  const [showContinuePrompt, setShowContinuePrompt] = useState(false);
+  const [lastFixedVuln, setLastFixedVuln] = useState<Vulnerability | null>(null);
   
   // Metrics
   const [metrics, setMetrics] = useState({ threats: 0, scanned: 0, fixed: 0, riskScore: 0 });
@@ -217,6 +220,8 @@ export default function Dashboard() {
     const sorted = [...vulnerabilities].sort((a, b) => b.riskScore - a.riskScore);
     const allIds = new Set(sorted.map(v => v.id));
     setSelectedIds(allIds);
+    setIsAutoMode(true);
+    setShowContinuePrompt(false);
     
     // Set up the queue
     setPendingQueue(sorted.slice(1)); // All except first
@@ -227,6 +232,7 @@ export default function Dashboard() {
   };
 
   const handleSelectManualStrategy = () => {
+    setIsAutoMode(false);
     setStage(WorkflowStage.MANUAL_SELECTION);
   };
 
@@ -247,6 +253,8 @@ export default function Dashboard() {
 
     // Get selected vulnerabilities sorted by risk
     const selectedVulns = sortedVulnerabilities.filter(v => selectedIds.has(v.id));
+    setIsAutoMode(false);
+    setShowContinuePrompt(false);
     
     // Set up the queue
     setPendingQueue(selectedVulns.slice(1)); // All except first
@@ -271,15 +279,30 @@ export default function Dashboard() {
 
       // Check if there are more in the queue
       if (pendingQueue.length > 0) {
-        // Process next vulnerability
-        const next = pendingQueue[0];
-        setPendingQueue(pendingQueue.slice(1));
-        setCurrentRemediationVuln(next);
+        if (isAutoMode) {
+          // In auto mode, show continue prompt
+          setLastFixedVuln(currentRemediationVuln);
+          setShowContinuePrompt(true);
+        } else {
+          // In manual mode, immediately go to next
+          const next = pendingQueue[0];
+          setPendingQueue(pendingQueue.slice(1));
+          setCurrentRemediationVuln(next);
+        }
       } else {
         // All done - show success
         setStage(WorkflowStage.SUCCESS);
       }
     }
+  };
+
+  const handleContinueToNext = () => {
+    // Process next vulnerability in auto mode
+    const next = pendingQueue[0];
+    setPendingQueue(pendingQueue.slice(1));
+    setCurrentRemediationVuln(next);
+    setShowContinuePrompt(false);
+    setLastFixedVuln(null);
   };
 
   const handleReturnToDashboard = () => {
@@ -290,15 +313,42 @@ export default function Dashboard() {
       setSelectedIds(new Set());
       setCurrentRemediationVuln(null);
       setPendingQueue([]);
-      setStage(WorkflowStage.STRATEGY_SELECTION);
+      setShowContinuePrompt(false);
+      setLastFixedVuln(null);
+      setIsAutoMode(false);
+      // Go directly to manual selection, not strategy selection again
+      setStage(WorkflowStage.MANUAL_SELECTION);
     } else {
       // All vulnerabilities fixed - go to idle
-      setStage(WorkflowStage.IDLE);
-      setRepoUrl('');
-      setVulnerabilities([]);
-      setRemediatedIds(new Set());
-      setPrUrls(new Map());
+      handleScanNewRepo();
     }
+  };
+
+  const handleScanNewRepo = () => {
+    setStage(WorkflowStage.IDLE);
+    setRepoUrl('');
+    setScannedRepo('');
+    setVulnerabilities([]);
+    setRemediatedIds(new Set());
+    setPrUrls(new Map());
+    setSelectedIds(new Set());
+    setCurrentRemediationVuln(null);
+    setPendingQueue([]);
+    setShowContinuePrompt(false);
+    setLastFixedVuln(null);
+    setIsAutoMode(false);
+    setMetrics({ threats: 0, scanned: 0, fixed: 0, riskScore: 0 });
+  };
+
+  const handleFixMoreIssues = () => {
+    // Go back to manual selection to fix more issues
+    setSelectedIds(new Set());
+    setCurrentRemediationVuln(null);
+    setPendingQueue([]);
+    setShowContinuePrompt(false);
+    setLastFixedVuln(null);
+    setIsAutoMode(false);
+    setStage(WorkflowStage.MANUAL_SELECTION);
   };
 
   // ============================================
@@ -571,7 +621,7 @@ export default function Dashboard() {
 
           {/* LIVE_OPS - Remediation Console */}
           <AnimatePresence mode="wait">
-            {stage === WorkflowStage.LIVE_OPS && currentRemediationVuln && (
+            {stage === WorkflowStage.LIVE_OPS && currentRemediationVuln && !showContinuePrompt && (
               <motion.section
                 key={`liveops-${currentRemediationVuln.id}`}
                 variants={slideVariants}
@@ -595,6 +645,78 @@ export default function Dashboard() {
                   onReturn={handleReturnToDashboard}
                   useRealApi={true}
                 />
+              </motion.section>
+            )}
+          </AnimatePresence>
+
+          {/* Continue Prompt - Shows after each fix in auto mode */}
+          <AnimatePresence mode="wait">
+            {stage === WorkflowStage.LIVE_OPS && showContinuePrompt && lastFixedVuln && (
+              <motion.section
+                key="continue-prompt"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="pt-12 max-w-2xl mx-auto"
+              >
+                <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8 text-center">
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: 'spring', stiffness: 200 }}
+                    className="inline-flex items-center justify-center w-16 h-16 mb-5 bg-emerald-500/10 rounded-2xl border border-emerald-500/20"
+                  >
+                    <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                  </motion.div>
+                  
+                  <h2 className="text-2xl font-semibold text-white mb-2">
+                    Issue Fixed Successfully!
+                  </h2>
+                  
+                  <p className="text-zinc-400 mb-2">
+                    <span className="text-emerald-400 font-medium">{lastFixedVuln.title}</span> has been patched.
+                  </p>
+                  
+                  <p className="text-zinc-500 text-sm mb-6">
+                    {pendingQueue.length} more {pendingQueue.length === 1 ? 'issue' : 'issues'} remaining in queue
+                  </p>
+                  
+                  <div className="flex items-center justify-center gap-4">
+                    <motion.button
+                      onClick={handleContinueToNext}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="
+                        inline-flex items-center gap-2 px-6 py-3
+                        text-sm font-medium text-black
+                        bg-[#00FF41] hover:bg-[#00FF41]/90
+                        rounded-lg transition-all
+                        shadow-[0_0_20px_rgba(0,255,65,0.3)]
+                      "
+                    >
+                      <Play className="w-4 h-4" />
+                      Continue to Next Issue
+                    </motion.button>
+                    
+                    <motion.button
+                      onClick={() => {
+                        setShowContinuePrompt(false);
+                        setStage(WorkflowStage.SUCCESS);
+                      }}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="
+                        inline-flex items-center gap-2 px-5 py-2.5
+                        text-sm font-medium text-zinc-300
+                        bg-zinc-800 border border-zinc-700 rounded-lg
+                        hover:bg-zinc-700 hover:border-zinc-600
+                        transition-all
+                      "
+                    >
+                      Finish & View Results
+                    </motion.button>
+                  </div>
+                </div>
               </motion.section>
             )}
           </AnimatePresence>
@@ -727,8 +849,9 @@ export default function Dashboard() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.7 }}
-                  className="flex items-center justify-center gap-4"
+                  className="flex flex-col items-center gap-4"
                 >
+                  {/* Primary action - View PRs */}
                   <motion.a
                     href={getGitHubUrl() + '/pulls'}
                     target="_blank"
@@ -736,32 +859,54 @@ export default function Dashboard() {
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     className="
-                      inline-flex items-center gap-2 px-5 py-2.5
-                      text-sm font-medium text-zinc-300
-                      bg-zinc-900 border border-zinc-700 rounded-lg
-                      hover:bg-zinc-800 hover:border-zinc-600
-                      transition-all
+                      inline-flex items-center gap-2 px-6 py-3
+                      text-sm font-medium text-black
+                      bg-[#00FF41] hover:bg-[#00FF41]/90
+                      rounded-lg transition-all
+                      shadow-[0_0_20px_rgba(0,255,65,0.3)]
                     "
                   >
                     <GitPullRequest className="w-4 h-4" />
                     View All PRs
                   </motion.a>
                   
-                  <motion.button
-                    onClick={handleReturnToDashboard}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="
-                      inline-flex items-center gap-2 px-5 py-2.5
-                      text-sm font-medium text-white
-                      bg-zinc-800 border border-zinc-700 rounded-lg
-                      hover:bg-zinc-700 hover:border-zinc-600
-                      transition-all
-                    "
-                  >
-                    <Zap className="w-4 h-4 text-emerald-500" />
-                    Scan Another Repository
-                  </motion.button>
+                  {/* Secondary actions row */}
+                  <div className="flex items-center gap-4">
+                    {/* Fix More Issues - only show if there are remaining vulnerabilities */}
+                    {vulnerabilities.filter(v => !remediatedIds.has(v.id)).length > 0 && (
+                      <motion.button
+                        onClick={handleFixMoreIssues}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="
+                          inline-flex items-center gap-2 px-5 py-2.5
+                          text-sm font-medium text-white
+                          bg-zinc-800 border border-zinc-700 rounded-lg
+                          hover:bg-zinc-700 hover:border-zinc-600
+                          transition-all
+                        "
+                      >
+                        <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                        Fix More Issues ({vulnerabilities.filter(v => !remediatedIds.has(v.id)).length} remaining)
+                      </motion.button>
+                    )}
+                    
+                    <motion.button
+                      onClick={handleScanNewRepo}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="
+                        inline-flex items-center gap-2 px-5 py-2.5
+                        text-sm font-medium text-zinc-300
+                        bg-zinc-900 border border-zinc-700 rounded-lg
+                        hover:bg-zinc-800 hover:border-zinc-600
+                        transition-all
+                      "
+                    >
+                      <Zap className="w-4 h-4 text-emerald-500" />
+                      Scan Another Repository
+                    </motion.button>
+                  </div>
                 </motion.div>
               </motion.section>
             )}
