@@ -26,8 +26,8 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
       args:
-        # ⚠️ REPLACE THIS with your DigitalOcean Droplet IP!
-        - NEXT_PUBLIC_API_URL=http://REPLACE_WITH_SERVER_IP:8000
+        # Your DigitalOcean Droplet IP
+        - NEXT_PUBLIC_API_URL=http://143.110.255.103:8000
     container_name: cj_frontend
     restart: always
     ports:
