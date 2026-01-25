@@ -47,9 +47,53 @@ class GitOps:
             self.github = None
             logger.warning("No GitHub token provided - GitHub operations will be limited")
     
+    def fork_repo(self, repo_name: str) -> str:
+        """
+        Fork a repository to the authenticated user's account.
+        If fork already exists, returns the existing fork.
+        
+        Args:
+            repo_name: Repository name (owner/repo)
+            
+        Returns:
+            Fork's full name (your_username/repo)
+        """
+        if not self.github:
+            raise GitOpsError("GitHub token required for forking")
+        
+        try:
+            # Get the original repo
+            original_repo = self.github.get_repo(repo_name)
+            authenticated_user = self.github.get_user()
+            
+            logger.info(f"Forking {repo_name} to {authenticated_user.login}...")
+            
+            # Check if fork already exists
+            try:
+                fork_name = f"{authenticated_user.login}/{original_repo.name}"
+                existing_fork = self.github.get_repo(fork_name)
+                logger.info(f"Fork already exists: {fork_name}")
+                return fork_name
+            except Exception:
+                pass  # Fork doesn't exist, create it
+            
+            # Create the fork
+            fork = authenticated_user.create_fork(original_repo)
+            logger.info(f"Fork created: {fork.full_name}")
+            
+            # Wait a moment for GitHub to process the fork
+            import time
+            time.sleep(2)
+            
+            return fork.full_name
+            
+        except Exception as e:
+            logger.error(f"Failed to fork repository: {e}")
+            raise GitOpsError(f"Fork failed: {e}")
+    
     def clone_repo(self, repo_url: str, target_dir: Path) -> Repo:
         """
-        Clone a repository
+        Clone a repository with authentication
         
         Args:
             repo_url: URL of the repository
@@ -59,8 +103,16 @@ class GitOps:
             Repo: GitPython Repo object
         """
         try:
-            logger.info(f"Cloning repository {repo_url} to {target_dir}")
-            repo = Repo.clone_from(repo_url, target_dir)
+            # Add token to URL for authenticated clone
+            if self.token and 'github.com' in repo_url:
+                # Convert https://github.com/owner/repo.git to https://token@github.com/owner/repo.git
+                auth_url = repo_url.replace('https://github.com', f'https://{self.token}@github.com')
+                logger.info(f"Cloning repository with authentication to {target_dir}")
+            else:
+                auth_url = repo_url
+                logger.info(f"Cloning repository {repo_url} to {target_dir}")
+            
+            repo = Repo.clone_from(auth_url, target_dir)
             logger.info(f"Repository cloned successfully")
             return repo
         except Exception as e:
@@ -114,15 +166,30 @@ class GitOps:
         """
         try:
             origin = repo.remote(name='origin')
+            remote_url = origin.url
+            logger.info(f"Remote URL: {remote_url[:50]}...")  # Log first 50 chars (hide token)
+            
             if branch_name:
-                logger.info(f"Pushing branch {branch_name}")
-                origin.push(branch_name)
+                logger.info(f"Pushing branch {branch_name} to origin")
+                # Use refspec to push with upstream tracking
+                push_info = origin.push(refspec=f'{branch_name}:{branch_name}', set_upstream=True)
+                
+                # Check push result
+                for info in push_info:
+                    logger.info(f"Push result: {info.summary}")
+                    if info.flags & info.ERROR:
+                        raise GitOpsError(f"Push failed: {info.summary}")
             else:
                 logger.info(f"Pushing current branch")
-                origin.push()
+                push_info = origin.push()
+                for info in push_info:
+                    logger.info(f"Push result: {info.summary}")
+                    
             logger.info("Changes pushed successfully")
         except Exception as e:
             logger.error(f"Failed to push changes: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             raise GitOpsError(f"Push failed: {e}")
     
     def create_pull_request(
@@ -200,10 +267,11 @@ class GitOps:
         work_dir: Path
     ) -> Optional[str]:
         """
-        Complete workflow: Clone, patch, commit, push, create PR
+        Complete workflow: Fork, Clone, patch, commit, push, create PR
+        Uses fork-based workflow to allow PRs to any public repository.
         
         Args:
-            repo_url: Repository URL
+            repo_url: Repository URL (original repo)
             file_path: Path to file to patch (relative to repo root)
             patched_content: Fixed code content
             issue_number: Issue number being fixed
@@ -213,33 +281,63 @@ class GitOps:
         Returns:
             PR URL if successful
         """
-        branch_name = f"fix/issue-{issue_number}"
+        branch_name = f"codejanitor/fix-{issue_number}"
         
         try:
             # Extract repo name from URL (owner/repo)
             # e.g., https://github.com/owner/repo.git -> owner/repo
-            repo_name = repo_url.split('github.com/')[-1].replace('.git', '')
+            original_repo_name = repo_url.split('github.com/')[-1].replace('.git', '')
             
-            # Clone repository
-            repo = self.clone_repo(repo_url, work_dir)
+            logger.info(f"=== PR WORKFLOW START (Fork-based) ===")
+            logger.info(f"Original Repo: {original_repo_name}")
+            logger.info(f"File: {file_path}")
+            logger.info(f"Branch: {branch_name}")
+            logger.info(f"Patched content length: {len(patched_content)} chars")
             
-            # Create fix branch
+            if not patched_content or len(patched_content) == 0:
+                raise GitOpsError("Patched content is empty - cannot create PR")
+            
+            # Step 1: Fork the repository (or get existing fork)
+            logger.info(f"Step 1: Forking repository...")
+            fork_repo_name = self.fork_repo(original_repo_name)
+            fork_url = f"https://github.com/{fork_repo_name}.git"
+            logger.info(f"Step 1: Fork ready: {fork_repo_name}")
+            
+            # Step 2: Clone the FORK (not the original)
+            logger.info(f"Step 2: Cloning fork...")
+            repo = self.clone_repo(fork_url, work_dir)
+            logger.info(f"Step 2: Fork cloned successfully")
+            
+            # Step 3: Create fix branch
+            logger.info(f"Step 3: Creating branch {branch_name}...")
             self.create_branch(repo, branch_name)
+            logger.info(f"Step 3: Branch created")
             
-            # Write patched content
+            # Step 4: Write patched content
+            logger.info(f"Step 4: Writing patched content to {file_path}...")
             target_file = work_dir / file_path
             target_file.parent.mkdir(parents=True, exist_ok=True)
             target_file.write_text(patched_content, encoding='utf-8')
+            logger.info(f"Step 4: File written ({target_file})")
             
-            # Commit changes
-            commit_msg = f"Security fix for issue #{issue_number}: {vulnerability_type}"
+            # Step 5: Commit changes
+            logger.info(f"Step 5: Committing changes...")
+            commit_msg = f"fix: {vulnerability_type} security vulnerability\n\nFixes #{issue_number}"
             self.commit_changes(repo, commit_msg, [file_path])
+            logger.info(f"Step 5: Changes committed")
             
-            # Push to remote
+            # Step 6: Push to FORK (we have write access to our fork)
+            logger.info(f"Step 6: Pushing to fork...")
             self.push_changes(repo, branch_name)
+            logger.info(f"Step 6: Push successful")
             
-            # Create PR
-            pr_title = f"🔒 Security Fix: {vulnerability_type} (Issue #{issue_number})"
+            # Step 7: Create PR from fork to original repo
+            logger.info(f"Step 7: Creating pull request (fork → original)...")
+            
+            # Get the fork owner (authenticated user)
+            fork_owner = fork_repo_name.split('/')[0]
+            
+            pr_title = f"🔒 Security Fix: {vulnerability_type}"
             pr_body = f"""## Security Patch
 
 This PR fixes a **{vulnerability_type}** vulnerability identified in issue #{issue_number}.
@@ -250,27 +348,37 @@ This PR fixes a **{vulnerability_type}** vulnerability identified in issue #{iss
 ### Verification
 ✅ Patch has been verified using Test-Driven Repair:
 - Original exploit confirmed vulnerability exists
-- Patch applied and tested
+- Patch applied and tested  
 - Exploit fails on patched code (vulnerability eliminated)
 
 ### Review Notes
 Please review the changes carefully. The patch has been automatically generated and verified, but human review is always recommended for security fixes.
 
+---
+*Generated by [CodeJanitor](https://github.com/codejanitor) - AI Security Scanner*
+
 Fixes #{issue_number}
 """
             
+            # Create PR from fork:branch to original:main
             pr_url = self.create_pull_request(
-                repo_name=repo_name,
+                repo_name=original_repo_name,  # PR goes to original repo
                 title=pr_title,
                 body=pr_body,
-                head=branch_name,
-                base="main"
+                head=f"{fork_owner}:{branch_name}",  # from fork's branch
+                base="main"  # to original's main
             )
+            
+            logger.info(f"Step 7: PR created successfully: {pr_url}")
+            logger.info(f"=== PR WORKFLOW COMPLETE ===")
             
             return pr_url
             
         except Exception as e:
+            logger.error(f"=== PR WORKFLOW FAILED ===")
             logger.error(f"Failed to create PR workflow: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             raise GitOpsError(f"PR workflow failed: {e}")
 
 

@@ -494,8 +494,13 @@ async def fix_vulnerability(request: FixRequest):
             
             # Create PR
             pr_url = None
+            pr_error_msg = None
             try:
                 work_dir = Path(tempfile.mkdtemp(prefix="codejanitor_pr_"))
+                
+                emit("pr", f"> Work directory: {work_dir}", "info")
+                emit("pr", f"> Repository: {repo}", "info")
+                emit("pr", f"> File to patch: {vuln.get('file', '')}", "info")
                 
                 pr_url = git_ops.create_pr_for_fix(
                     repo_url=f"https://github.com/{repo}.git",
@@ -513,8 +518,12 @@ async def fix_vulnerability(request: FixRequest):
                 emit("pr", f"> PR URL: {pr_url}", "success")
                 
             except Exception as pr_error:
+                pr_error_msg = str(pr_error)
                 logger.error(f"PR creation failed: {pr_error}")
-                emit("pr", f"> PR creation failed: {str(pr_error)[:100]}", "warning")
+                import traceback
+                logger.error(traceback.format_exc())
+                emit("pr", f"> PR creation failed: {pr_error_msg}", "error")
+                emit("pr", "> Check server logs for details", "warning")
             
             emit("pr", "╔" + "═" * 38 + "╗", "success")
             emit("pr", "║  REMEDIATION COMPLETE               ║", "success")
