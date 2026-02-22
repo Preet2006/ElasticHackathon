@@ -70,8 +70,8 @@ def login(username, password):
         kb = CodeKnowledgeBase()
         
         assert kb is not None
-        assert kb.graph.number_of_nodes() == 0
-        assert kb.graph.number_of_edges() == 0
+        assert len(kb.analyzed_files) == 0
+        assert len(kb.file_contents) == 0
     
     def test_build_graph_basic(self, temp_repo):
         """Test building a basic dependency graph"""
@@ -79,10 +79,11 @@ def login(username, password):
         kb.build_graph(temp_repo)
         
         # Should have found all Python files
-        assert kb.graph.number_of_nodes() >= 4
+        stats = kb.get_graph_stats()
+        assert stats["total_files"] >= 4
         
         # Should have edges for imports
-        assert kb.graph.number_of_edges() >= 2
+        assert stats["total_imports"] >= 2
     
     def test_import_detection(self, temp_repo):
         """Test that imports are correctly detected"""
@@ -90,11 +91,11 @@ def login(username, password):
         kb.build_graph(temp_repo)
         
         # main.py imports helper.py
-        assert kb.graph.has_edge("main.py", "helper.py")
+        main_imports = kb.get_imports("main.py")
+        assert "helper.py" in main_imports
         
         # main.py imports app/utils/db.py
-        assert kb.graph.has_edge("main.py", "app/utils/db.py") or \
-               kb.graph.has_edge("main.py", "app\\utils\\db.py")
+        assert "app/utils/db.py" in main_imports
     
     def test_nested_imports(self, temp_repo):
         """Test nested import detection"""
@@ -102,11 +103,8 @@ def login(username, password):
         kb.build_graph(temp_repo)
         
         # app/utils/db.py imports app/utils/config.py
-        db_path = "app/utils/db.py" if "/" in list(kb.graph.nodes())[0] else "app\\utils\\db.py"
-        config_path = "app/utils/config.py" if "/" in list(kb.graph.nodes())[0] else "app\\utils\\config.py"
-        
-        if db_path in kb.graph and config_path in kb.graph:
-            assert kb.graph.has_edge(db_path, config_path)
+        db_imports = kb.get_imports("app/utils/db.py")
+        assert "app/utils/config.py" in db_imports
     
     def test_relative_imports(self, temp_repo):
         """Test relative import resolution"""
@@ -114,11 +112,9 @@ def login(username, password):
         kb.build_graph(temp_repo)
         
         # app/auth.py imports from .utils (relative import)
-        auth_path = "app/auth.py" if "/" in list(kb.graph.nodes())[0] else "app\\auth.py"
-        db_path = "app/utils/db.py" if "/" in list(kb.graph.nodes())[0] else "app\\utils\\db.py"
-        
-        if auth_path in kb.graph and db_path in kb.graph:
-            assert kb.graph.has_edge(auth_path, db_path)
+        auth_imports = kb.get_imports("app/auth.py")
+        if "app/auth.py" in kb.file_contents and "app/utils/db.py" in kb.file_contents:
+            assert "app/utils/db.py" in auth_imports
     
     def test_get_context_depth_1(self, temp_repo):
         """Test context retrieval with depth=1 (direct dependencies)"""
@@ -191,9 +187,10 @@ def test():
         kb.build_graph(temp_repo)
         
         # Should not have edges to stdlib modules
-        assert not kb.graph.has_edge("stdlib_test.py", "os")
-        assert not kb.graph.has_edge("stdlib_test.py", "sys")
-        assert not kb.graph.has_edge("stdlib_test.py", "json")
+        stdlib_imports = kb.get_imports("stdlib_test.py")
+        assert "os" not in stdlib_imports
+        assert "sys" not in stdlib_imports
+        assert "json" not in stdlib_imports
     
     def test_get_dependents(self, temp_repo):
         """Test reverse dependency lookup"""
@@ -256,7 +253,7 @@ def test():
         kb.build_graph(temp_repo)
         
         # Should not crash
-        assert "missing.py" in kb.graph
+        assert "missing.py" in kb.file_contents
 
 
 def test_real_codebase_analysis():
@@ -278,13 +275,13 @@ def test_real_codebase_analysis():
     print(f"Avg imports per file: {stats['avg_imports_per_file']:.2f}")
     
     # Test context retrieval on actual files
-    if "app/agents/auditor.py" in kb.graph:
+    if "app/agents/auditor.py" in kb.file_contents:
         context = kb.get_context("app/agents/auditor.py", depth=1)
         assert len(context) > 0
         print(f"\nContext size for auditor.py: {len(context)} chars")
     
     # Visualize orchestrator dependencies
-    if "app/core/orchestrator.py" in kb.graph:
+    if "app/core/orchestrator.py" in kb.file_contents:
         tree = kb.visualize_dependencies("app/core/orchestrator.py", max_depth=1)
         print(f"\nOrchestrator dependencies:\n{tree}")
 

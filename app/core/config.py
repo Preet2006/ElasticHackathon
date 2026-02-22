@@ -78,6 +78,17 @@ class Settings(BaseSettings):
         description="Disable network access in Docker containers"
     )
     
+    # Elasticsearch (Elastic Cloud)
+    es_cloud_id: str = Field(
+        default="",
+        description="Elastic Cloud deployment Cloud ID"
+    )
+
+    es_api_key: str = Field(
+        default="",
+        description="Elastic Cloud API key (base64-encoded id:key)"
+    )
+
     # Logging Configuration
     log_level: str = Field(
         default="INFO",
