@@ -201,10 +201,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # wide-open for hackathon demo
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,      # must be False when origins="*"
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 
@@ -658,13 +659,23 @@ async def legacy_fix(request: LegacyFixRequest):
 # ═══════════════════════════════════════════════════════════════════════════════
 # MCP (Model Context Protocol) – Elastic Agent Builder integration
 # ═══════════════════════════════════════════════════════════════════════════════
+# Only expose the 3 core tools to the Elastic Agent Builder.
+# Operation IDs match the Python function names of the @app.post routes.
 
 mcp = FastApiMCP(
     app,
     name="CodeJanitor",
-    description="AI-powered security scanner with Red Team exploit verification and Blue Team automated patching. Backed by Elasticsearch and Groq LLM.",
+    description=(
+        "AI-powered security scanner with Red Team exploit verification "
+        "and Blue Team automated patching. Backed by Elasticsearch and Groq LLM."
+    ),
+    include_operations=[
+        "scan_repository",   # POST /scan
+        "verify_exploit",    # POST /verify-exploit
+        "apply_patch",       # POST /apply-patch
+    ],
 )
-mcp.mount()  # creates /mcp endpoint
+mcp.mount()  # creates GET /mcp + SSE transport
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
