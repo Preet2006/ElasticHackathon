@@ -1,4 +1,4 @@
-# CodeJanitor 2.0 - Best-in-Class Tech Stack
+#+ CodeJanitor 2.0 - Best-in-Class Tech Stack
 
 # Orchestration & Agents
 langgraph>=0.2.0
