@@ -45,3 +45,6 @@ python-dotenv>=1.0.0
 # API Server (FastAPI)
 fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
+
+# MCP (Model Context Protocol) for Elastic Agent Builder
+fastapi-mcp>=0.1.0

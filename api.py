@@ -37,6 +37,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi_mcp import FastApiMCP
 from pydantic import BaseModel, Field
 
 load_dotenv()
@@ -652,6 +653,18 @@ async def legacy_fix(request: LegacyFixRequest):
         _stream(), media_type="application/x-ndjson",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MCP (Model Context Protocol) – Elastic Agent Builder integration
+# ═══════════════════════════════════════════════════════════════════════════════
+
+mcp = FastApiMCP(
+    app,
+    name="CodeJanitor",
+    description="AI-powered security scanner with Red Team exploit verification and Blue Team automated patching. Backed by Elasticsearch and Groq LLM.",
+)
+mcp.mount()  # creates /mcp endpoint
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
